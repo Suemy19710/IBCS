@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title> Jugo - AI tool </title>
+  <link rel="icon" href="J-icon.png">
+
+  <style>
+    :root{
+      --bg:#ffffff;
+      --accent:#ff8c00;
+      --accent-2:#13196B;
+      --muted:#555;
+      --glass:rgba(0,0,0,0.05);
+      --radius:14px;
+      --max-width:1100px;
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial;
+    }
+
+    body{
+      margin:0;
+      background:#ffffff;
+      color:#13196B;
+    }
+
+    a{color:var(--accent-2); text-decoration:none}
+    img{display:block; max-width:100%}
+
+    .container{
+      max-width:var(--max-width);
+      margin:0 auto;
+      padding:30px 20px;
+    }
+
+    header{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      padding:8px 0;
+    }
+
+    .brand{
+      display:flex;
+      align-items:center;
+      gap:14px;
+    }
+
+    .logo img{
+      width:180px;
+      height:auto;
+    }
+
+    nav{
+      display:flex;
+      gap:14px;
+      font-weight:600;
+    }
+
+    nav a{
+      padding:8px 12px;
+      border-radius:8px;
+      color:#13196B;
+    }
+
+    nav a:hover{
+      background:var(--glass);
+    }
+
+    /* Upload Box */
+    .upload-box{
+      margin:60px auto 0;
+      max-width:600px;
+      background:#f6f7fb;
+      border:2px dashed #13196B;
+      padding:40px;
+      text-align:center;
+      border-radius:var(--radius);
+    }
+
+    .upload-box h2{
+      margin-top:0;
+      margin-bottom:20px;
+      font-size:26px;
+      color:#13196B;
+    }
+
+    input[type="file"]{
+      margin-top:10px;
+      padding:10px;
+      font-size:16px;
+      cursor:pointer;
+    }
+
+    .btn-upload{
+      margin-top:25px;
+      padding:12px 24px;
+      background:var(--accent);
+      color:white;
+      border:none;
+      border-radius:10px;
+      font-weight:700;
+      cursor:pointer;
+      font-size:16px;
+    }
+
+    .btn-upload:hover{
+      opacity:0.9;
+    }
+    /* Loading Overlay */
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(4px);
+    display: none; /* Hidden by default */
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    z-index: 9999;
+}
+
+.dots {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 15px;
+}
+
+.dots span {
+    width: 18px;
+    height: 18px;
+    background: var(--accent); /* Orange */
+    border-radius: 50%;
+    animation: bounce 0.6s infinite alternate;
+}
+
+.dots span:nth-child(2) {
+    animation-delay: 0.2s;
+}
+
+.dots span:nth-child(3) {
+    animation-delay: 0.4s;
+}
+
+@keyframes bounce {
+    from { transform: translateY(0); opacity: 0.4; }
+    to { transform: translateY(-12px); opacity: 1; }
+}
+
+.loading-overlay p {
+    font-size: 18px;
+    color: var(--accent-2);
+    font-weight: 600;
+}
+
+
+  </style>
+</head>
+
+<body>
+
+<div class="container">
+  
+  <!-- Header -->
+<header>
+    <div class="brand">
+        <a href="Website_homepage.html" class="logo">
+            <img src="Logo_jugo.png" alt="Jugo logo">
+        </a>
+    </div>
+
+
+    <nav>
+      <a href="Website_homepage.html">Home</a>
+      <a href="#home">Tool</a>
+      <a href="Website_feedback.html">Feedback</a>
+    </nav>
+  </header>
+
+  <!-- Upload Section -->
+  <div class="upload-box">
+    <h2>Upload Your Dashboard</h2>
+    <p style="max-width:450px;margin:0 auto 20px;color:#555;">
+      Choose an image of your dashboard layout or graph you'd like us to analyze.
+    </p>
+
+    <input type="file" id="fileInput" accept="image/*">
+
+    <button class="btn-upload" onclick="uploadFile()">Upload</button>
+  </div>
+
+</div>
+
+
+<script>
+async function uploadFile() {
+    const file = document.getElementById('fileInput').files[0];
+    if (!file) {
+        alert("Please select an image before uploading.");
+        return;
+    }
+    document.getElementById("loadingScreen").style.display = "flex";
+
+    // Store uploaded image for display later
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        sessionStorage.setItem("uploadedImage", e.target.result);
+    };
+    reader.readAsDataURL(file);
+
+    // Send file to backend
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+        const response = await fetch("http://127.0.0.1:8000/api/predict", {
+            method: "POST",
+            body: formData
+        });
+
+        if (!response.ok) {
+            throw new Error("Backend error: " + response.status);
+        }
+
+        const result = await response.json();
+
+        // Save backend result
+        sessionStorage.setItem("modelResult", JSON.stringify(result));
+
+        // redirect to feedback page
+        window.location.href = "Website_feedback.html";
+
+    } catch (err) {
+        console.error(err);
+        alert("Error connecting to backend.");
+    }
+}
+</script>
+<div id="loadingScreen" class="loading-overlay">
+    <div class="dots">
+        <span></span><span></span><span></span>
+    </div>
+    <p>Analyzing your dashboard...</p>
+</div>
+
+
+
+</body>
+</html>
