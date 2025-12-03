@@ -76,7 +76,7 @@
 .text-box {
     background: #ffffff;
     color: var(--accent);
-    font-size: 20px;
+    font-size: 16px;
     font-weight: normal;
     display: flex;
     flex-direction: column;
@@ -92,7 +92,6 @@
       display:flex;
       align-items:center;
       justify-content:center;
-      font-size:24px;
       font-weight:bold;
     }
 
@@ -165,8 +164,9 @@ if (resultRaw) {
     const result = JSON.parse(resultRaw);
     textBox.innerHTML = `
         <div>
-            <p><strong>Status:</strong> ${result.compliance.toUpperCase()}</p>
-            <p><strong>Message:</strong> ${result.message}</p>
+            <p><strong>Label:</strong> ${result.label}</p>
+            <p><strong>Rule:</strong> ${result.rule}</p>
+            <p><strong>Feedback:</strong> ${result.feedback}</p>
         </div>
     `;
 } else {
