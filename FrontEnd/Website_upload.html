@@ -107,55 +107,46 @@
     .btn-upload:hover{
       opacity:0.9;
     }
-    /* Loading Overlay */
-.loading-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(255, 255, 255, 0.9);
-    backdrop-filter: blur(4px);
-    display: none; /* Hidden by default */
-    justify-content: center;
-    align-items: center;
-    flex-direction: column;
-    z-index: 9999;
+
+    .drop-zone {
+  border: 2px dashed var(--accent-2);
+  background: #ffffff;
+  padding: 40px;
+  border-radius: 14px;
+  cursor: pointer;
+  color: var(--accent-2);
+  margin-bottom: 20px;
+  transition: 0.25s;
 }
 
-.dots {
-    display: flex;
-    gap: 12px;
-    margin-bottom: 15px;
+.drop-zone.dragover {
+  background: #eaf0ff;
+  border-color: var(--accent);
 }
 
-.dots span {
-    width: 18px;
-    height: 18px;
-    background: var(--accent); /* Orange */
-    border-radius: 50%;
-    animation: bounce 0.6s infinite alternate;
-}
+.btn-upload, .btn-photo{
+      margin-top:15px;
+      padding:12px 24px;
+      background:var(--accent);
+      color:white;
+      border:none;
+      border-radius:10px;
+      font-weight:700;
+      cursor:pointer;
+      font-size:16px;
+    }
 
-.dots span:nth-child(2) {
-    animation-delay: 0.2s;
-}
+    .btn-upload:hover, .btn-photo:hover{
+      opacity:0.9;
+    }
 
-.dots span:nth-child(3) {
-    animation-delay: 0.4s;
-}
-
-@keyframes bounce {
-    from { transform: translateY(0); opacity: 0.4; }
-    to { transform: translateY(-12px); opacity: 1; }
-}
-
-.loading-overlay p {
-    font-size: 18px;
-    color: var(--accent-2);
-    font-weight: 600;
-}
-
+    /* Hidden video element for camera */
+    #cameraPreview {
+      display: none;
+      margin-top: 20px;
+      width: 100%;
+      border-radius: 10px;
+    }
 
   </style>
 </head>
@@ -165,13 +156,12 @@
 <div class="container">
   
   <!-- Header -->
-<header>
+  <header>
     <div class="brand">
         <a href="Website_homepage.html" class="logo">
-            <img src="Logo_jugo.png" alt="Jugo logo">
+            <img src="Logo_xmas.png" alt="Jugo logo">
         </a>
     </div>
-
 
     <nav>
       <a href="Website_homepage.html">Home</a>
@@ -181,72 +171,133 @@
   </header>
 
   <!-- Upload Section -->
-  <div class="upload-box">
-    <h2>Upload Your Dashboard</h2>
-    <p style="max-width:450px;margin:0 auto 20px;color:#555;">
-      Choose an image of your dashboard layout or graph you'd like us to analyze.
-    </p>
+<div class="upload-box">
+  <h2>Upload Your Dashboard</h2>
+  <p style="max-width:450px;margin:0 auto 20px;color:#555;">
+    Drag an image, upload, or take a photo.
+  </p>
 
-    <input type="file" id="fileInput" accept="image/*">
-
-    <button class="btn-upload" onclick="uploadFile()">Upload</button>
+  <!-- Drag & Drop Zone -->
+  <div id="dropZone" class="drop-zone">
+      <p>Drag & Drop your dashboard image here</p>
   </div>
+
+  <!-- TAKE PHOTO BUTTON -->
+  <button class="btn-photo" onclick="openCamera()">Take Photo</button>
+
+  <!-- Hidden camera preview -->
+  <video id="cameraPreview" autoplay></video>
+
+  <!-- Upload button only for drag & drop uploads -->
+  <button class="btn-upload" onclick="uploadFile()">Upload</button>
 
 </div>
 
-
 <script>
-async function uploadFile() {
-    const file = document.getElementById('fileInput').files[0];
-    if (!file) {
-        alert("Please select an image before uploading.");
+const dropZone = document.getElementById("dropZone");
+const cameraPreview = document.getElementById("cameraPreview");
+
+let cameraStream = null;
+let droppedFile = null;
+
+/* ---------------------------------------------
+   DRAG & DROP
+--------------------------------------------- */
+
+dropZone.addEventListener("click", () => {
+  alert("Drag an image into the box to upload.");
+});
+
+// Highlight when dragging over
+dropZone.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    dropZone.classList.add("dragover");
+});
+
+// Remove highlight
+dropZone.addEventListener("dragleave", () => {
+    dropZone.classList.remove("dragover");
+});
+
+// Handle dropped file
+dropZone.addEventListener("drop", (e) => {
+    e.preventDefault();
+    dropZone.classList.remove("dragover");
+
+    const file = e.dataTransfer.files[0];
+    if (!file || !file.type.startsWith("image/")) {
+        alert("Please drop a valid image file.");
         return;
     }
-    document.getElementById("loadingScreen").style.display = "flex";
 
-    // Store uploaded image for display later
+    droppedFile = file;
+    alert("Image added! Click Upload.");
+});
+
+/* ---------------------------------------------
+   CAMERA MODE
+--------------------------------------------- */
+
+async function openCamera() {
+    try {
+        cameraStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: "environment" }
+        });
+
+        cameraPreview.srcObject = cameraStream;
+        cameraPreview.style.display = "block";
+
+        // Replace button with "Capture Photo"
+        document.querySelector(".btn-photo").innerText = "Capture Photo";
+        document.querySelector(".btn-photo").onclick = capturePhoto;
+
+    } catch (err) {
+        alert("Camera not available.");
+    }
+}
+
+function capturePhoto() {
+    const video = cameraPreview;
+    const canvas = document.createElement("canvas");
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(video, 0, 0);
+
+    const dataURL = canvas.toDataURL("image/png");
+
+    // Stop camera
+    cameraStream.getTracks().forEach(t => t.stop());
+    cameraPreview.style.display = "none";
+
+    // Save photo to sessionStorage
+    sessionStorage.setItem("uploadedImage", dataURL);
+
+    alert("Photo captured!");
+
+    window.location.href = "Website_feedback.html";
+}
+
+/* ---------------------------------------------
+   UPLOAD BUTTON (ONLY FOR DROPPED IMAGE)
+--------------------------------------------- */
+function uploadFile() {
+    if (!droppedFile) {
+        alert("Please drag an image into the box first.");
+        return;
+    }
+
     const reader = new FileReader();
     reader.onload = function(e) {
         sessionStorage.setItem("uploadedImage", e.target.result);
-    };
-    reader.readAsDataURL(file);
-
-    // Send file to backend
-    const formData = new FormData();
-    formData.append("file", file);
-
-    try {
-        const response = await fetch("http://127.0.0.1:8000/api/predict", {
-            method: "POST",
-            body: formData
-        });
-
-        if (!response.ok) {
-            throw new Error("Backend error: " + response.status);
-        }
-
-        const result = await response.json();
-
-        // Save backend result
-        sessionStorage.setItem("modelResult", JSON.stringify(result));
-
-        // redirect to feedback page
         window.location.href = "Website_feedback.html";
+    };
 
-    } catch (err) {
-        console.error(err);
-        alert("Error connecting to backend.");
-    }
+    reader.readAsDataURL(droppedFile);
 }
 </script>
-<div id="loadingScreen" class="loading-overlay">
-    <div class="dots">
-        <span></span><span></span><span></span>
-    </div>
-    <p>Analyzing your dashboard...</p>
-</div>
-
-
 
 </body>
 </html>
