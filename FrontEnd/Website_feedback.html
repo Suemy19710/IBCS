@@ -67,48 +67,74 @@
       background:var(--glass);
     }
 
-    /* NEW STYLES FOR IMAGE AND TEXT CONTAINERS */
-    .display-wrapper {
-      display: flex;
-      gap:20px;
-      margin-top:30px;
-    }
-.text-box {
-    background: #ffffff;
-    color: var(--accent);
-    font-size: 16px;
-    font-weight: normal;
-    display: flex;
-    flex-direction: column;
-    padding: 25px;
-    line-height: 1.6;
+   .display-wrapper {
+  display: flex;
+  gap: 20px;
+  margin-top: 30px;
+  align-items: stretch; /* make columns equal height */
 }
 
-    .image-box, .text-box {
-      flex:1;
-      border: 3px solid var(--accent-2);
-      border-radius:14px;
-      height:300px;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      font-weight:bold;
-    }
+.image-box,
+.text-box {
+  flex: 1;
+  border: 3px solid var(--accent-2);
+  border-radius: 14px;
+  display: flex;
+  padding: 25px;
+}
 
-    .image-box {
-      background: var(--accent-2); /* Blue background */
-    }
+/* image box */
+.image-box {
+  background: var(--accent-2);
+  justify-content: center;
+  align-items: center;
+}
 
-    .image-box img {
-      max-width: 90%;
-      max-height: 90%;
-      border-radius:10px;
-    }
+.image-box img {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 10px;
+  object-fit: contain;
+}
 
-    .text-box {
-      background: #ffffff; /* White background */
-      color: var(--accent); /* Orange text */
-    }
+/* text box */
+.text-box {
+  background: #ffffff;
+  color: var(--accent-2);
+  font-size: 20px;
+  line-height: 1.6;
+  overflow-wrap: break-word; /* keep long text inside the box */
+}
+
+/* Mobile: stack vertically */
+@media (max-width: 768px) {
+  .display-wrapper {
+    flex-direction: column;
+  }
+}
+
+.back-button-wrapper {
+  margin-top: 40px;
+  display: flex;
+  justify-content: center;
+}
+
+.back-home-btn {
+  padding: 12px 24px;
+  font-size: 18px;
+  font-weight: 600;
+  color: white;
+  background: var(--accent-2);
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.back-home-btn:hover {
+  background: var(--accent);
+  transform: scale(1.05);
+}
 
   </style>
 </head>
@@ -121,10 +147,9 @@
 <header>
     <div class="brand">
         <a href="Website_homepage.html" class="logo">
-            <img src="Logo_jugo.png" alt="Jugo logo">
+            <img src="Logo_xmas.png" alt="Jugo logo">
         </a>
     </div>
-
 
     <nav>
       <a href="Website_homepage.html">Home</a>
@@ -164,8 +189,8 @@ if (resultRaw) {
     const result = JSON.parse(resultRaw);
     textBox.innerHTML = `
         <div>
-            <p><strong>Label:</strong> ${result.label}</p>
-            <p><strong>Rule:</strong> ${result.rule}</p>
+            <p><strong>This dashboard is:</strong> ${result.label}</p>
+            <p><strong>The rule it is breaking:</strong> ${result.rule}</p>
             <p><strong>Feedback:</strong> ${result.feedback}</p>
         </div>
     `;
@@ -174,6 +199,11 @@ if (resultRaw) {
 }
 </script>
 
+<div class="back-button-wrapper">
+    <button class="back-home-btn" onclick="window.location.href='Website_homepage.html'">
+        Back to Homepage
+    </button>
+</div>
 
 </div>
 </body>
