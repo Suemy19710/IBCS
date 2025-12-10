@@ -14,8 +14,7 @@ build-job:
     - echo "Building Jugo project application..."
     - echo "Build completed successfully!"
   tags:
-    - "https://git.fhict.nl/I531971/group1-jugo.git"
-
+    - windows      # or whatever tag you actually set
 
 deploy-job:
   stage: deploy
@@ -25,4 +24,4 @@ deploy-job:
   only:
     - main
   tags:
-    - "https://git.fhict.nl/I531971/group1-jugo.git"
+    - windows
