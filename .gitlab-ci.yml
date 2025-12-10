@@ -1,0 +1,27 @@
+stages:
+  - build
+  - test
+  - deploy
+
+before_script:
+  - dotnet --info
+  - dotnet nuget locals all --list
+  - dotnet restore
+
+build-job:
+  stage: build
+  script:
+    - echo "Building Jugo project application..."
+    - echo "Build completed successfully!"
+  tags:
+    - windows      # or whatever tag you actually set
+
+deploy-job:
+  stage: deploy
+  script:
+    - echo "Application ready for deployment to Luna"
+    - echo "Deployment stage complete (placeholder)"
+  only:
+    - main
+  tags:
+    - windows
