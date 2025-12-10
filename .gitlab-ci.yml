@@ -1,0 +1,17 @@
+stages:
+    - install
+    - test
+
+install_job:
+    stage: install 
+    script:
+        - sudo apt-get update
+        - sudo apt-get install -y apache2
+        - sudo systemctl start apache2
+        - sudo cp -R ./*.html /var/www/html
+        - sudo systemctl reload apache2
+
+test_job:
+    stage: test
+    script: 
+        - sudo echo "Running tests..."
