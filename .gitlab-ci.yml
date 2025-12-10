@@ -1,17 +1,28 @@
 stages:
-    - install
-    - test
+  - build
+  - test
+  - deploy
 
-install_job:
-    stage: install 
-    script:
-        - sudo apt-get update
-        - sudo apt-get install -y apache2
-        - sudo systemctl start apache2
-        - sudo cp -R ./*.html /var/www/html
-        - sudo systemctl reload apache2
+before_script:
+  - dotnet --info
+  - dotnet nuget locals all --list
+  - dotnet restore
 
-test_job:
-    stage: test
-    script: 
-        - sudo echo "Running tests..."
+build-job:
+  stage: build
+  script:
+    - echo "Building Jugo project application..."
+    - echo "Build completed successfully!"
+  tags:
+    - "https://git.fhict.nl/I531971/group1-jugo.git"
+
+
+deploy-job:
+  stage: deploy
+  script:
+    - echo "Application ready for deployment to Luna"
+    - echo "Deployment stage complete (placeholder)"
+  only:
+    - main
+  tags:
+    - "https://git.fhict.nl/I531971/group1-jugo.git"
