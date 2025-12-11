@@ -85,46 +85,23 @@
       color:#13196B;
     }
 
-    input[type="file"]{
-      margin-top:10px;
-      padding:10px;
-      font-size:16px;
-      cursor:pointer;
-    }
-
-    .btn-upload{
-      margin-top:25px;
-      padding:12px 24px;
-      background:var(--accent);
-      color:white;
-      border:none;
-      border-radius:10px;
-      font-weight:700;
-      cursor:pointer;
-      font-size:16px;
-    }
-
-    .btn-upload:hover{
-      opacity:0.9;
-    }
-
     .drop-zone {
-  border: 2px dashed var(--accent-2);
-  background: #ffffff;
-  padding: 40px;
-  border-radius: 14px;
-  cursor: pointer;
-  color: var(--accent-2);
-  margin-bottom: 20px;
-  transition: 0.25s;
-}
+      border: 2px dashed var(--accent-2);
+      background: #ffffff;
+      padding: 40px;
+      border-radius: 14px;
+      cursor: pointer;
+      color: var(--accent-2);
+      margin-bottom: 20px;
+      transition: 0.25s;
+    }
 
-.drop-zone.dragover {
-  background: #eaf0ff;
-  border-color: var(--accent);
-}
+    .drop-zone.dragover {
+      background: #eaf0ff;
+      border-color: var(--accent);
+    }
 
-.btn-upload, .btn-photo{
+    .btn-upload, .btn-photo{
       margin-top:15px;
       padding:12px 24px;
       background:var(--accent);
@@ -140,14 +117,18 @@
       opacity:0.9;
     }
 
-    /* Hidden video element for camera */
+    #fileName {
+      margin-top: 10px;
+      font-size: 14px;
+      color: #555;
+    }
+
     #cameraPreview {
       display: none;
       margin-top: 20px;
       width: 100%;
       border-radius: 10px;
     }
-
   </style>
 </head>
 
@@ -173,14 +154,18 @@
   <!-- Upload Section -->
 <div class="upload-box">
   <h2>Upload Your Dashboard</h2>
-  <p style="max-width:450px;margin:0 auto 20px;color:#555;">
-    Drag an image, upload, or take a photo.
-  </p>
+
 
   <!-- Drag & Drop Zone -->
   <div id="dropZone" class="drop-zone">
-      <p>Drag & Drop your dashboard image here</p>
+      <p>Click or Drag & Drop your dashboard image here</p>
   </div>
+
+  <!-- Hidden click-to-upload input -->
+  <input type="file" id="fileInput" accept="image/*" style="display:none;">
+
+  <!-- File name preview -->
+  <div id="fileName"></div>
 
   <!-- TAKE PHOTO BUTTON -->
   <button class="btn-photo" onclick="openCamera()">Take Photo</button>
@@ -188,7 +173,6 @@
   <!-- Hidden camera preview -->
   <video id="cameraPreview" autoplay></video>
 
-  <!-- Upload button only for drag & drop uploads -->
   <button class="btn-upload" onclick="uploadFile()">Upload</button>
 
 </div>
@@ -196,30 +180,41 @@
 <script>
 const dropZone = document.getElementById("dropZone");
 const cameraPreview = document.getElementById("cameraPreview");
+const fileInput = document.getElementById("fileInput");
+const fileNameDisplay = document.getElementById("fileName");
 
 let cameraStream = null;
-let droppedFile = null;
+let selectedFile = null;
 
-/* ---------------------------------------------
-   DRAG & DROP
---------------------------------------------- */
-
+/* -------------------------------------------------------
+   CLICK TO OPEN FILE PICKER
+------------------------------------------------------- */
 dropZone.addEventListener("click", () => {
-  alert("Drag an image into the box to upload.");
+  fileInput.click();
 });
 
-// Highlight when dragging over
+/* -------------------------------------------------------
+   FILE PICKER IMAGE SELECTED
+------------------------------------------------------- */
+fileInput.addEventListener("change", () => {
+  if (fileInput.files.length > 0) {
+    selectedFile = fileInput.files[0];
+    fileNameDisplay.textContent = selectedFile.name;
+  }
+});
+
+/* -------------------------------------------------------
+   DRAG & DROP
+------------------------------------------------------- */
 dropZone.addEventListener("dragover", (e) => {
     e.preventDefault();
     dropZone.classList.add("dragover");
 });
 
-// Remove highlight
 dropZone.addEventListener("dragleave", () => {
     dropZone.classList.remove("dragover");
 });
 
-// Handle dropped file
 dropZone.addEventListener("drop", (e) => {
     e.preventDefault();
     dropZone.classList.remove("dragover");
@@ -230,14 +225,13 @@ dropZone.addEventListener("drop", (e) => {
         return;
     }
 
-    droppedFile = file;
-    alert("Image added! Click Upload.");
+    selectedFile = file;
+    fileNameDisplay.textContent = file.name;
 });
 
-/* ---------------------------------------------
+/* -------------------------------------------------------
    CAMERA MODE
---------------------------------------------- */
-
+------------------------------------------------------- */
 async function openCamera() {
     try {
         cameraStream = await navigator.mediaDevices.getUserMedia({
@@ -247,7 +241,6 @@ async function openCamera() {
         cameraPreview.srcObject = cameraStream;
         cameraPreview.style.display = "block";
 
-        // Replace button with "Capture Photo"
         document.querySelector(".btn-photo").innerText = "Capture Photo";
         document.querySelector(".btn-photo").onclick = capturePhoto;
 
@@ -268,24 +261,20 @@ function capturePhoto() {
 
     const dataURL = canvas.toDataURL("image/png");
 
-    // Stop camera
     cameraStream.getTracks().forEach(t => t.stop());
     cameraPreview.style.display = "none";
 
-    // Save photo to sessionStorage
     sessionStorage.setItem("uploadedImage", dataURL);
-
-    alert("Photo captured!");
 
     window.location.href = "Website_feedback.html";
 }
 
-/* ---------------------------------------------
-   UPLOAD BUTTON (ONLY FOR DROPPED IMAGE)
---------------------------------------------- */
+/* -------------------------------------------------------
+   UPLOAD BUTTON
+------------------------------------------------------- */
 function uploadFile() {
-    if (!droppedFile) {
-        alert("Please drag an image into the box first.");
+    if (!selectedFile) {
+        alert("Please select or drop an image first.");
         return;
     }
 
@@ -295,7 +284,7 @@ function uploadFile() {
         window.location.href = "Website_feedback.html";
     };
 
-    reader.readAsDataURL(droppedFile);
+    reader.readAsDataURL(selectedFile);
 }
 </script>
 
