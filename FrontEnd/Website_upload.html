@@ -272,19 +272,56 @@ function capturePhoto() {
 /* -------------------------------------------------------
    UPLOAD BUTTON
 ------------------------------------------------------- */
-function uploadFile() {
-    if (!selectedFile) {
-        alert("Please select or drop an image first.");
-        return;
+// function uploadFile() {
+//     if (!selectedFile) {
+//         alert("Please select or drop an image first.");
+//         return;
+//     }
+
+//     const reader = new FileReader();
+//     reader.onload = function(e) {
+//         sessionStorage.setItem("uploadedImage", e.target.result);
+//         window.location.href = "Website_feedback.html";
+//     };
+
+//     reader.readAsDataURL(selectedFile);
+// }
+
+async function uploadFile() {
+  if (!selectedFile) {
+    alert("Please select or capture an image first.");
+    return;
+  }
+
+  // Save image preview
+  const reader = new FileReader();
+  reader.onload = e => sessionStorage.setItem("uploadedImage", e.target.result);
+  reader.readAsDataURL(selectedFile);
+
+  // Send to FastAPI
+  const formData = new FormData();
+  formData.append("file", selectedFile);
+
+  try {
+    const res = await fetch("http://localhost:8000/api/predict", {
+      method: "POST",
+      body: formData
+    });
+
+    if (!res.ok) {
+      statusBox.textContent = "Server error.";
+      return;
     }
 
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        sessionStorage.setItem("uploadedImage", e.target.result);
-        window.location.href = "Website_feedback.html";
-    };
+    const data = await res.json();
 
-    reader.readAsDataURL(selectedFile);
+    sessionStorage.setItem("modelResult", JSON.stringify(data));
+
+    window.location.href = "Website_feedback.html";
+
+  } catch (err) {
+    console.error(err);
+  }
 }
 </script>
 
