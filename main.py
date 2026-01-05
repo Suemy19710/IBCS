@@ -135,8 +135,8 @@ def run_prediction(
         return class_id, label, rule, confidence, feedback
     
     except Exception as e:
-        print(f"[ERROR] Prediction failed: {str(e)}")
-        import traceback
+        print(f"[ERROR] Prediction failed:{str(e)}")
+        import traceback 
         traceback.print_exc()
         raise
 
