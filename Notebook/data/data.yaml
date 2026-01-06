@@ -1,0 +1,11 @@
+path: data
+train: train/images
+val: validation/images
+nc: 6
+names:
+- OK_NoIssue
+- S1_AxisNotZero
+- S2_UnequalTickSpacing
+- S3_DistortedScaleRange
+- S4_MissingAxisValues
+- S5_MisusedDualAxis

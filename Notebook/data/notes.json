@@ -1,0 +1,33 @@
+{
+  "categories": [
+    {
+      "id": 0,
+      "name": "OK_NoIssue"
+    },
+    {
+      "id": 1,
+      "name": "S1_AxisNotZero"
+    },
+    {
+      "id": 2,
+      "name": "S2_UnequalTickSpacing"
+    },
+    {
+      "id": 3,
+      "name": "S3_DistortedScaleRange"
+    },
+    {
+      "id": 4,
+      "name": "S4_MissingAxisValues"
+    },
+    {
+      "id": 5,
+      "name": "S5_MisusedDualAxis"
+    }
+  ],
+  "info": {
+    "year": 2026,
+    "version": "1.0",
+    "contributor": "Label Studio"
+  }
+}
