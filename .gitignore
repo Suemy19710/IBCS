@@ -1,0 +1,12 @@
+# ===== Data & ML =====
+Data/
+IBCS/
+Notebook/data/
+Notebook/runs/
+
+# ===== Jupyter =====
+.ipynb_checkpoints/
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
