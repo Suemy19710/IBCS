@@ -3,15 +3,3 @@ Data/
 IBCS/
 Notebook/data/
 Notebook/runs/
-
-# ===== Jupyter =====
-.ipynb_checkpoints/
-
-# ===== OS =====
-.DS_Store
-Thumbs.db
-
-# Model checkpoints
-Checkpoints/
-*.pt
-*.pth
