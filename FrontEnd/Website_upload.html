@@ -122,13 +122,6 @@
       font-size: 14px;
       color: #555;
     }
-
-    #cameraPreview {
-      display: none;
-      margin-top: 20px;
-      width: 100%;
-      border-radius: 10px;
-    }
   </style>
 </head>
 
@@ -147,55 +140,46 @@
     <nav>
       <a href="Website_homepage.html">Home</a>
       <a href="#home">Tool</a>
-      <a href="Website_feedback.html">Feedback</a>
+      <!--<a href="Website_feedback.html">Result</a>-->
     </nav>
   </header>
 
   <!-- Upload Section -->
-<div class="upload-box">
-  <h2>Upload Your Dashboard</h2>
+  <div class="upload-box">
+    <h2>Upload Your Dashboard</h2>
 
-
-  <!-- Drag & Drop Zone -->
-  <div id="dropZone" class="drop-zone">
+    <div id="dropZone" class="drop-zone">
       <p>Click or Drag & Drop your dashboard image here</p>
+    </div>
+
+    <!-- Normal file picker (gallery / files) -->
+    <input type="file" id="fileInput" accept="image/*" style="display:none;">
+
+    <!-- Camera-only input for phones -->
+    <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none;">
+
+    <div id="fileName"></div>
+
+    <button class="btn-photo" onclick="openCamera()">Take Photo</button>
+
+    <button class="btn-upload" onclick="uploadFile()">Upload</button>
   </div>
-
-  <!-- Hidden click-to-upload input -->
-  <input type="file" id="fileInput" accept="image/*" style="display:none;">
-
-  <!-- File name preview -->
-  <div id="fileName"></div>
-
-  <!-- TAKE PHOTO BUTTON -->
-  <button class="btn-photo" onclick="openCamera()">Take Photo</button>
-
-  <!-- Hidden camera preview -->
-  <video id="cameraPreview" autoplay></video>
-
-  <button class="btn-upload" onclick="uploadFile()">Upload</button>
-
 </div>
 
 <script>
 const dropZone = document.getElementById("dropZone");
-const cameraPreview = document.getElementById("cameraPreview");
 const fileInput = document.getElementById("fileInput");
+const cameraInput = document.getElementById("cameraInput");
 const fileNameDisplay = document.getElementById("fileName");
 
-let cameraStream = null;
 let selectedFile = null;
 
-/* -------------------------------------------------------
-   CLICK TO OPEN FILE PICKER
-------------------------------------------------------- */
+/* CLICK TO OPEN FILE PICKER */
 dropZone.addEventListener("click", () => {
   fileInput.click();
 });
 
-/* -------------------------------------------------------
-   FILE PICKER IMAGE SELECTED
-------------------------------------------------------- */
+/* FILE PICKER (gallery / files) */
 fileInput.addEventListener("change", () => {
   if (fileInput.files.length > 0) {
     selectedFile = fileInput.files[0];
@@ -203,125 +187,59 @@ fileInput.addEventListener("change", () => {
   }
 });
 
-/* -------------------------------------------------------
-   DRAG & DROP
-------------------------------------------------------- */
+/* DRAG & DROP */
 dropZone.addEventListener("dragover", (e) => {
-    e.preventDefault();
-    dropZone.classList.add("dragover");
+  e.preventDefault();
+  dropZone.classList.add("dragover");
 });
 
 dropZone.addEventListener("dragleave", () => {
-    dropZone.classList.remove("dragover");
+  dropZone.classList.remove("dragover");
 });
 
 dropZone.addEventListener("drop", (e) => {
-    e.preventDefault();
-    dropZone.classList.remove("dragover");
+  e.preventDefault();
+  dropZone.classList.remove("dragover");
 
-    const file = e.dataTransfer.files[0];
-    if (!file || !file.type.startsWith("image/")) {
-        alert("Please drop a valid image file.");
-        return;
-    }
+  const file = e.dataTransfer.files[0];
+  if (!file || !file.type.startsWith("image/")) {
+    alert("Please drop a valid image file.");
+    return;
+  }
 
-    selectedFile = file;
-    fileNameDisplay.textContent = file.name;
+  selectedFile = file;
+  fileNameDisplay.textContent = file.name;
 });
 
-/* -------------------------------------------------------
-   CAMERA MODE
-------------------------------------------------------- */
-async function openCamera() {
-    try {
-        cameraStream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: "environment" }
-        });
-
-        cameraPreview.srcObject = cameraStream;
-        cameraPreview.style.display = "block";
-
-        document.querySelector(".btn-photo").innerText = "Capture Photo";
-        document.querySelector(".btn-photo").onclick = capturePhoto;
-
-    } catch (err) {
-        alert("Camera not available.");
-    }
+/* CAMERA MODE (native capture on phone) */
+function openCamera() {
+  // This will ask permission and open the camera app on most phones
+  cameraInput.click();
 }
 
-function capturePhoto() {
-    const video = cameraPreview;
-    const canvas = document.createElement("canvas");
+/* When a photo is taken via cameraInput */
+cameraInput.addEventListener("change", () => {
+  if (cameraInput.files.length > 0) {
+    selectedFile = cameraInput.files[0];
+    // Some browsers give generic names for captured images
+    fileNameDisplay.textContent = selectedFile.name || "Photo captured";
+  }
+});
 
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(video, 0, 0);
-
-    const dataURL = canvas.toDataURL("image/png");
-
-    cameraStream.getTracks().forEach(t => t.stop());
-    cameraPreview.style.display = "none";
-
-    sessionStorage.setItem("uploadedImage", dataURL);
-
-    window.location.href = "Website_feedback.html";
-}
-
-/* -------------------------------------------------------
-   UPLOAD BUTTON
-------------------------------------------------------- */
-// function uploadFile() {
-//     if (!selectedFile) {
-//         alert("Please select or drop an image first.");
-//         return;
-//     }
-
-//     const reader = new FileReader();
-//     reader.onload = function(e) {
-//         sessionStorage.setItem("uploadedImage", e.target.result);
-//         window.location.href = "Website_feedback.html";
-//     };
-
-//     reader.readAsDataURL(selectedFile);
-// }
-
-async function uploadFile() {
+/* UPLOAD BUTTON */
+function uploadFile() {
   if (!selectedFile) {
     alert("Please select or capture an image first.");
     return;
   }
 
-  // Save image preview
   const reader = new FileReader();
-  reader.onload = e => sessionStorage.setItem("uploadedImage", e.target.result);
-  reader.readAsDataURL(selectedFile);
-
-  // Send to FastAPI
-  const formData = new FormData();
-  formData.append("file", selectedFile);
-
-  try {
-    const res = await fetch("http://localhost:8000/api/predict", {
-      method: "POST",
-      body: formData
-    });
-
-    if (!res.ok) {
-      statusBox.textContent = "Server error.";
-      return;
-    }
-
-    const data = await res.json();
-
-    sessionStorage.setItem("modelResult", JSON.stringify(data));
-
+  reader.onload = function(e) {
+    sessionStorage.setItem("uploadedImage", e.target.result);
     window.location.href = "Website_feedback.html";
+  };
 
-  } catch (err) {
-    console.error(err);
-  }
+  reader.readAsDataURL(selectedFile);
 }
 </script>
 
