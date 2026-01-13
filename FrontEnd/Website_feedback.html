@@ -103,6 +103,8 @@
   color: var(--accent-2);
   font-size: 20px;
   line-height: 1.6;
+  flex-direction: column;   
+  gap: 12px;               
   overflow-wrap: break-word; /* keep long text inside the box */
 }
 
@@ -136,6 +138,37 @@
   transform: scale(1.05);
 }
 
+#textBox, .result-box, .feedback-box {
+  line-height: 1.45;
+  color: #13196B;
+}
+
+.fb-title {
+  font-weight: 700;
+  margin: 0 0 12px 0;
+}
+
+.fb-body {
+  margin: 0;
+  font-weight: 400;
+}
+
+.fb-readmore a {
+  color: #3a77ff; /* soft light blue */
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.fb-readmore a:hover {
+  text-decoration: underline;
+}
+
+.feedback-box {
+  padding: 20px 28px;
+  overflow-wrap: break-word;
+  flex-direction: column;
+}
+
   </style>
 </head>
 
@@ -152,10 +185,11 @@
     </div>
 
     <nav>
-      <a href="Website_homepage.html">Home</a>
-      <a href="Website_upload.html">Tool</a>
-      <a href="#">Feedback</a>
+      <a href="Website_homepage.html" class="confirm-leave">Home</a>
+      <a href="Website_upload.html" class="confirm-leave">Tool</a>
+      <a href="#">Result</a>
     </nav>
+
   </header>
 
   <!-- DISPLAY IMAGE AND TEXT SIDE BY SIDE -->
@@ -195,9 +229,20 @@ if (resultRaw) {
         </div>
     `;
 } else {
-    textBox.textContent = "No feedback received from the AI model.";
+  textBox.innerHTML = `
+    <p class="fb-title">The uploaded image is not compliant with the 'Starts at 0' rule.</p>
+
+    <p class="fb-body">
+      Make sure the scales in your charts are consistent. This means that the values are represented fairly, so people can compare numbers accurately. For example, bar and column charts should usually start at zero, unless there’s a good reason not to (and it's clearly labeled). If you show several charts together, make sure their scales match so viewers can easily compare them without being misled.<br><br>
+      <span class="fb-readmore">Read more: 
+        <a href="https://example.com" target="_blank">IBCS Resource</a>
+      </span>
+    </p>
+  `;
 }
+
 </script>
+
 
 <div class="back-button-wrapper">
     <button class="back-home-btn" onclick="window.location.href='Website_homepage.html'">
@@ -205,7 +250,23 @@ if (resultRaw) {
     </button>
 </div>
 
+<script>
+document.querySelectorAll(".confirm-leave").forEach(link => {
+  link.addEventListener("click", function(e) {
+    e.preventDefault(); // stop navigation first
+
+    const target = this.href;
+
+    const confirmLeave = confirm("Are you sure you want to leave the site? Your progress will be lost.");
+
+    if (confirmLeave) {
+      window.location.href = target;
+    }
+  });
+});
+</script>
+
+
 </div>
 </body>
 </html>
-
