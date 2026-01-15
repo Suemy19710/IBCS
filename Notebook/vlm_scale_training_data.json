@@ -1,0 +1,120 @@
+[
+  {
+    "id": "scale_example_0",
+    "image": "placeholder_for_image_0.png",
+    "conversations": [
+      {
+        "role": "user",
+        "content": "Analyze this chart for IBCS compliance with focus on scale issues."
+      },
+      {
+        "role": "assistant",
+        "content": "STATUS: Non-Compliant\nSCALE_ISSUES: S1_AxisNotZero\nVERIFICATION: Confirmed - Y-axis starts at 50 instead of 0\nISSUES:\n- S1 \u2013 Axis Not Zero: Bar chart y-axis starts at 50, exaggerating differences between bars\nRULES:\n- IBCS Scale Rule 1: Value axes must start at zero unless showing deviations\nRECOMMENDATIONS:\n- Change y-axis minimum to 0\n- Consider using deviation chart if showing small variations\nSEVERITY: High (distorts perception by 400%)"
+      }
+    ],
+    "metadata": {
+      "scale_issues": [
+        "S1_AxisNotZero"
+      ],
+      "description": "Bar chart with y-axis starting at 50 instead of 0"
+    }
+  },
+  {
+    "id": "scale_example_1",
+    "image": "placeholder_for_image_1.png",
+    "conversations": [
+      {
+        "role": "user",
+        "content": "Analyze this chart for IBCS compliance with focus on scale issues."
+      },
+      {
+        "role": "assistant",
+        "content": "STATUS: Non-Compliant\nSCALE_ISSUES: S2_UnequalTickSpacing\nVERIFICATION: Confirmed - X-axis ticks at 0, 5, 15, 30 (unequal spacing)\nISSUES:\n- S2 \u2013 Unequal Tick Spacing: Irregular intervals distort perception of rate of change\nRULES:\n- IBCS Scale Rule 2: Tick marks must be equally spaced\nRECOMMENDATIONS:\n- Use equal intervals (e.g., 0, 10, 20, 30)\n- Ensure consistent spacing reflects true data relationships\nSEVERITY: Medium (misleads about trend consistency)"
+      }
+    ],
+    "metadata": {
+      "scale_issues": [
+        "S2_UnequalTickSpacing"
+      ],
+      "description": "Line chart with irregular tick spacing (0, 5, 15, 30)"
+    }
+  },
+  {
+    "id": "scale_example_2",
+    "image": "placeholder_for_image_2.png",
+    "conversations": [
+      {
+        "role": "user",
+        "content": "Analyze this chart for IBCS compliance with focus on scale issues."
+      },
+      {
+        "role": "assistant",
+        "content": "STATUS: Non-Compliant\nSCALE_ISSUES: S3_DistortedScaleRange\nVERIFICATION: Confirmed - Y-axis range 99-101 for values around 100\nISSUES:\n- S3 \u2013 Distorted Scale Range: Extremely compressed range exaggerates minor variations\nRULES:\n- IBCS Scale Rule 3: Scale ranges must proportionally represent data magnitude\nRECOMMENDATIONS:\n- Use appropriate scale range (e.g., 90-110 or 0-120)\n- Consider indexed values (100 = baseline) for percentage changes\nSEVERITY: High (2% difference appears as 50% of scale)"
+      }
+    ],
+    "metadata": {
+      "scale_issues": [
+        "S3_DistortedScaleRange"
+      ],
+      "description": "Chart with extremely compressed y-axis range"
+    }
+  },
+  {
+    "id": "scale_example_3",
+    "image": "placeholder_for_image_3.png",
+    "conversations": [
+      {
+        "role": "user",
+        "content": "Analyze this chart for IBCS compliance with focus on scale issues."
+      },
+      {
+        "role": "assistant",
+        "content": "STATUS: Non-Compliant\nSCALE_ISSUES: S4_MissingAxisValues\nVERIFICATION: Confirmed - Y-axis has tick marks but no numerical labels\nISSUES:\n- S4 \u2013 Missing Axis Values: Cannot determine actual values from chart\nRULES:\n- IBCS INFO Rule 3: All axes must have clear labels and values\nRECOMMENDATIONS:\n- Add numerical labels to all major tick marks\n- Include measurement units in axis title\nSEVERITY: Low (reduces interpretability but values might be in data labels)"
+      }
+    ],
+    "metadata": {
+      "scale_issues": [
+        "S4_MissingAxisValues"
+      ],
+      "description": "Chart with missing axis labels and values"
+    }
+  },
+  {
+    "id": "scale_example_4",
+    "image": "placeholder_for_image_4.png",
+    "conversations": [
+      {
+        "role": "user",
+        "content": "Analyze this chart for IBCS compliance with focus on scale issues."
+      },
+      {
+        "role": "assistant",
+        "content": "STATUS: Non-Compliant\nSCALE_ISSUES: S5_MisusedDualAxis\nVERIFICATION: Confirmed - Left axis shows revenue ($), right axis shows growth (%)\nISSUES:\n- S5 \u2013 Misused Dual Axis: Comparing different units on same chart is misleading\nRULES:\n- IBCS Scale Rule 5: Avoid dual axes; use separate charts or indexed values\nRECOMMENDATIONS:\n- Create two separate charts\n- Or index both series to common baseline (e.g., Q1 = 100)\nSEVERITY: High (encourages false correlations between different metrics)"
+      }
+    ],
+    "metadata": {
+      "scale_issues": [
+        "S5_MisusedDualAxis"
+      ],
+      "description": "Chart with dual y-axes for different metrics"
+    }
+  },
+  {
+    "id": "scale_example_5",
+    "image": "placeholder_for_image_5.png",
+    "conversations": [
+      {
+        "role": "user",
+        "content": "Analyze this chart for IBCS compliance with focus on scale issues."
+      },
+      {
+        "role": "assistant",
+        "content": "STATUS: Compliant\nSCALE_ISSUES: None\nVERIFICATION: All scale requirements met\nISSUES: No scale issues detected\nRULES:\n- IBCS Scale Rules 1-5: All satisfied\nRECOMMENDATIONS: Continue following IBCS standards\nSEVERITY: N/A"
+      }
+    ],
+    "metadata": {
+      "scale_issues": [],
+      "description": "Compliant chart with proper scale"
+    }
+  }
+]
