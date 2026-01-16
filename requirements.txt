@@ -5,8 +5,8 @@ gunicorn==21.2.0
 python-multipart==0.0.6
 
 # PyTorch (CPU version - smaller, works on Render free tier)
-torch==2.1.2
-torchvision==0.16.2
+torch==2.5.1
+torchvision==0.20.1
 
 # Pillow for image processing
 pillow==10.1.0
@@ -15,10 +15,8 @@ pillow==10.1.0
 pydantic==2.5.0
 pydantic-settings==2.1.0
 
-# NumPy
-numpy==1.24.3
+# NumPy - need newer version for PyTorch compatibility
+numpy==1.26.4
 
 # Python dotenv for environment variables
 python-dotenv==1.0.0
-
-
