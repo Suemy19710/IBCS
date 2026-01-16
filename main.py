@@ -165,12 +165,23 @@ async def predict(file: UploadFile = File(...)):
             raise HTTPException(status_code=400, detail="Invalid image file.")
 
         fake_details = {
-            "scaling": {"violations": ["non_zero_start"]},
-            "titles": {"violations": ["missing_title"]},
-            "color_misuse": {"violations": ["excessive_colors"]},
-            "axis_check": {"violations": ["missing_units"]},
-            "clutter_detection": {"violations": ["excessive_elements"]},
+            "S1_AxisNotZero": {
+                "violations": ["non_zero_start"]
+            },
+            "S2_UnequalTickSpacing": {
+                "violations": ["irregular_ticks"]
+            },
+            "S3_DistortedScaleRange": {
+                "violations": ["inconsistent_range", "overzoomed"]
+            },
+            "S4_MissingAxisValues": {
+                "violations": ["missing_units", "too_few_labels"]
+            },
+            "S5_MisusedDualAxis": {
+                "violations": ["unlabeled_secondary_axis", "confusing_overlap"]
+            },
         }
+
 
         class_id, label, rule, confidence, feedback = run_prediction(
             image, details_by_rule=fake_details

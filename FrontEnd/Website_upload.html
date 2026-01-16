@@ -240,7 +240,7 @@ async function uploadFile() {
     formData.append("file", selectedFile);
 
     // 2. Call your API
-    const res = await fetch("http://localhost:8000/predict", {
+    const res = await fetch("http://localhost:8000/api/predict", {
       method: "POST",
       body: formData
     });

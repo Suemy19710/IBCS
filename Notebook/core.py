@@ -1,18 +1,28 @@
 import torch.nn as nn
 from torchvision import models
 from torchvision import transforms
+from typing import List 
 
 NUM_CLASSES = 6
 
+
 CLASS_TO_RULE = {
     0: ("Compliant", None),
-    1: ("Non-compliant", "Scaling"),
-    2: ("Non-compliant", "Titles"),
-    3: ("Non-compliant", "Color_misuse"),
-    4: ("Non-compliant", "Axis_check"),
-    5: ("Non-compliant", "Clutter_detection"),
+    1: ("Non-compliant", "S1_AxisNotZero"),
+    2: ("Non-compliant", "S2_UnequalTickSpacing"),
+    3: ("Non-compliant", "S3_DistortedScaleRange"),
+    4: ("Non-compliant", "S4_MissingAxisValues"),
+    5: ("Non-compliant", "S5_MisusedDualAxis"),
 }
 
+
+RULE_DESCRIPTIONS = {
+    "S1_AxisNotZero": "Axis does not start at zero",
+    "S2_UnequalTickSpacing": "Unequal spacing between tick marks",
+    "S3_DistortedScaleRange": "Distorted or inconsistent scale ranges",
+    "S4_MissingAxisValues": "Missing or incomplete axis values",
+    "S5_MisusedDualAxis": "Misuse of dual axes",
+}
 def create_mobilenet_rule_model(num_classes: int = NUM_CLASSES):
     model = models.mobilenet_v3_small(pretrained=True)
     in_features = model.classifier[3].in_features
@@ -34,84 +44,96 @@ def generate_feedback(rule: str, label: str, confidence: float, details: dict = 
         "confidence": round(confidence, 2),
         "feedback": []
     }
-    
+
     # If compliant
-    if label == 'Compliant':
+    if label == "Compliant":
         feedback["feedback"].append(
-            f"Great! It follows the {rule if rule else 'IBCS'} rules. This dashboard meets the required compliance standards. Layout, readability, and structure appear suitable."
+            f"Great! This visualization appears compliant with the expected charting rules. "
+            f"Layout, readability, and structure look suitable. "
             f"Confidence: {confidence:.0%}."
         )
         return feedback
-    
+
     # Non-compliant: Give specific, helpful suggestions
     suggestions: List[str] = []
-    
-    if rule == 'Scaling':
+    rule_desc = RULE_DESCRIPTIONS.get(rule, rule)
+
+    # S1 – Axis does not start at zero
+    if rule == "S1_AxisNotZero":
         suggestions.extend([
-            "**Start bar charts at zero.** If your y-axis starts above zero, it can make small differences look huge.",
-            "**Use the same scale for similar charts.** If you're comparing sales across regions, all charts should have identical y-axis ranges.",
-            "**Show scale breaks clearly.** If you must skip part of the scale, use a visible break symbol (like ~) so readers know.",
-            "**Label your units.** Add '(in EUR)', '(%)' or similar to your axis labels.",
-            "**Avoid dual axes unless absolutely necessary.** Two different scales on one chart confuse readers."
+            f"Issue detected: {rule_desc}.",
+            "Start value axes at zero whenever possible. Non-zero starts can exaggerate small differences.",
+            "Use a clear break symbol (like `//` or `~`) if you *must* cut off part of the axis.",
+            "Document exceptions. If you don't start at zero for a good reason (e.g. medical doses), mention it in the title or subtitle."
         ])
-        
         if details:
-            violations = details.get('violations', [])
-            if 'axis_misaligned' in violations:
-                suggestions.insert(0, "**Axis alignment issue detected.** Check the areas highlighted in red.")
-            if 'non_zero_start' in violations:
-                suggestions.insert(0, "**Your y-axis doesn't start at zero.** This can mislead viewers.")
-            if 'inconsistent_scale' in violations:
-                suggestions.insert(0, "**Different charts use different scales.** Make them uniform for fair comparison.")
-    
-    elif rule == 'Titles':
+            if "non_zero_start" in details.get("violations", []):
+                suggestions.insert(1, "Your axis seems to start above zero. This can mislead readers about the real magnitude of changes.")
+
+    # S2 – Unequal tick spacing
+    elif rule == "S2_UnequalTickSpacing":
         suggestions.extend([
-            "\n**Use descriptive titles.** Good example: 'Monthly Revenue (EUR) - Q1 2025'. Bad example: 'Chart 1'.",
-            "\n**Include the 5 W's:** What (Revenue), Where (Netherlands), When (January 2025), how much (in thousands).",
-            "\n**Put titles at the top** of each chart, not inside it.",
-            "\n**Keep it concise but clear.** Aim for one line if possible."
+            f"Issue detected: {rule_desc}.",
+            "Keep tick marks evenly spaced for linear scales. Irregular spacing makes trends hard to read.",
+            "Check for mixed scales. Make sure you're not accidentally mixing log and linear behavior.",
+            "Use gridlines consistently so the gaps between values visually match the numeric distances."
         ])
-        
-        if details and 'missing_title' in details.get('violations', []):
-            suggestions.insert(0, "**Missing title detected.** Every chart needs a clear heading.")
-    
-    elif rule == 'Color_misuse':
+        if details:
+            if "irregular_ticks" in details.get("violations", []):
+                suggestions.insert(1, "Irregular tick spacing detected. Align tick positions with their numeric values.")
+
+    # S3 – Distorted scale range
+    elif rule == "S3_DistortedScaleRange":
         suggestions.extend([
-            "**Use color sparingly.** Only highlight what matters—usually negatives (red) or key data points.",
-            "**Stick to IBCS colors:** Blue/grey for normal data, red for negative, green for positive variance.",
-            "**Avoid rainbow charts.** Too many colors make it hard to focus.",
-            "**Test in grayscale.** If your chart doesn't make sense in black and white, you're relying too much on color."
+            f"Issue detected: {rule_desc}.",
+            "Use comparable ranges when comparing charts. If two charts compare the same metric, keep the same min/max.",
+            "Avoid extreme zooming on small ranges if it exaggerates noise.",
+            "Highlight truncated ranges clearly in the title or annotation so viewers know the scale is limited."
         ])
-        
-        if details and 'excessive_colors' in details.get('violations', []):
-            suggestions.insert(0, "**Too many colors detected.** Simplify your color palette.")
-    
-    elif rule == 'Axis_check':
+        if details:
+            v = details.get("violations", [])
+            if "inconsistent_range" in v:
+                suggestions.insert(1, "Different charts use different ranges for the same metric. Normalize the range to compare fairly.")
+            if "overzoomed" in v:
+                suggestions.insert(1, "The scale is very tight. Consider widening it to give more context.")
+
+    # S4 – Missing axis values
+    elif rule == "S4_MissingAxisValues":
         suggestions.extend([
-            "**Label both axes clearly.** Include units like '(thousands)', '(%)' or '(days)'.",
-            "**Use readable tick marks.** Not too many (cluttered) or too few (unclear).",
-            "**Rotate labels if needed.** Long category names work better at 45° or vertically.",
-            "**Remove unnecessary gridlines.** Keep only horizontal lines for bar charts, only vertical for column charts."
+            f"Issue detected: {rule_desc}.",
+            "Label your axes clearly. Make sure both axis titles and units are visible, e.g. `Revenue (kEUR)`.",
+            "Include enough tick labels so readers can estimate values, not just direction.",
+            "Avoid overlapping labels. Rotate or abbreviate labels rather than dropping them entirely."
         ])
-        
-        if details and 'missing_units' in details.get('violations', []):
-            suggestions.insert(0, "**Missing units on axis.** Add '(EUR)', '(%)' etc. to your labels.")
-    
-    elif rule == 'Clutter_detection':
+        if details:
+            v = details.get("violations", [])
+            if "missing_units" in v:
+                suggestions.insert(1, "Units are missing on at least one axis. Add `(%)`, `(days)`, `(EUR)`, etc.")
+            if "too_few_labels" in v:
+                suggestions.insert(1, "Very few axis labels detected. Add more tick labels so values can be interpreted.")
+
+    # S5 – Misused dual axis
+    elif rule == "S5_MisusedDualAxis":
         suggestions.extend([
-            "**Remove decorative elements.** 3D effects, shadows, and borders don't add value.",
-            "**Delete redundant legends.** If you only have one data series, label it directly on the chart.",
-            "**Simplify backgrounds.** Use white or light grey—no patterns or gradients.",
-            "**Cut unnecessary labels.** If every bar is labeled, you don't need y-axis tick marks."
+            f"Issue detected: {rule_desc}.",
+            "Avoid dual axes if possible. They are often confusing and easy to misread.",
+            "If you must use dual axes, use clearly different chart types (e.g. bars for one metric, line for the other).",
+            "Align the story, not the shapes. Make sure you're not implying correlation just because lines overlap.",
+            "Consider small multiples instead. Two simpler charts are often clearer than one complex dual-axis chart."
         ])
-        
-        if details and 'excessive_elements' in details.get('violations', []):
-            suggestions.insert(0, "**Too many visual elements.** Simplify for better readability.")
-    
+        if details:
+            v = details.get("violations", [])
+            if "unlabeled_secondary_axis" in v:
+                suggestions.insert(1, "The secondary axis is unlabeled. Add a clear title and units.")
+            if "confusing_overlap" in v:
+                suggestions.insert(1, "Lines/series overlap in a misleading way. Separate them or split into multiple charts.")
+
+    # Fallback if we get an unknown rule code
     else:
-        suggestions.append(f"Unknown rule: '{rule}'. Please check your configuration.")
-    
+        suggestions.append(
+            f"Rule code `{rule}` was detected, but no detailed guidance is configured. "
+            "Please check your rule mapping or add guidance for this rule."
+        )
 
     feedback["feedback"] = suggestions
     return feedback
- 
