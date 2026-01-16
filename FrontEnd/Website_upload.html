@@ -213,7 +213,6 @@ dropZone.addEventListener("drop", (e) => {
 
 /* CAMERA MODE (native capture on phone) */
 function openCamera() {
-  // This will ask permission and open the camera app on most phones
   cameraInput.click();
 }
 
@@ -221,12 +220,11 @@ function openCamera() {
 cameraInput.addEventListener("change", () => {
   if (cameraInput.files.length > 0) {
     selectedFile = cameraInput.files[0];
-    // Some browsers give generic names for captured images
     fileNameDisplay.textContent = selectedFile.name || "Photo captured";
   }
 });
 
-/* UPLOAD BUTTON */
+/* UPLOAD BUTTON: camera + API + redirect */
 async function uploadFile() {
   if (!selectedFile) {
     alert("Please select or capture an image first.");
@@ -234,44 +232,38 @@ async function uploadFile() {
   }
 
   try {
-    // 1. Put the image file in FormData
+    // 1. Send file to backend
     const formData = new FormData();
-    // "file" should match what your backend expects, e.g. request.files["file"]
-    formData.append("file", selectedFile);
+    formData.append("file", selectedFile); // name must match backend
 
-    // 2. Call your API
-    const res = await fetch("http://localhost:8000/api/predict", {
+    const res = await fetch("http://127.0.0.1:8000/api/predict", {
       method: "POST",
       body: formData
     });
 
     if (!res.ok) {
-      alert("Server error while calling /predict.");
+      alert("Server error while calling /api/predict");
       return;
     }
 
     const data = await res.json();
 
-    // 3. Store API result + image preview in sessionStorage, then redirect
+    // 2. Store image + result, then redirect
     const reader = new FileReader();
-    reader.onload = function (e) {
-      // base64 image for preview on the feedback page
+    reader.onload = function(e) {
       sessionStorage.setItem("uploadedImage", e.target.result);
-      // model result from backend
       sessionStorage.setItem("modelResult", JSON.stringify(data));
-
       window.location.href = "Website_feedback.html";
     };
 
     reader.readAsDataURL(selectedFile);
-
   } catch (err) {
     console.error(err);
     alert("Something went wrong while uploading.");
   }
 }
-
 </script>
+
 
 </body>
 </html>
