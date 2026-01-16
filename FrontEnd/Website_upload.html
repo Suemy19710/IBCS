@@ -167,7 +167,7 @@
 </div>
 
 <script>
-const dropZone = document.getElementById("dropZone");
+  const dropZone = document.getElementById("dropZone");
 const fileInput = document.getElementById("fileInput");
 const cameraInput = document.getElementById("cameraInput");
 const fileNameDisplay = document.getElementById("fileName");
@@ -231,22 +231,40 @@ async function uploadFile() {
     return;
   }
 
+  // Show loading state
+  const uploadBtn = document.querySelector('.btn-upload');
+  const originalText = uploadBtn.textContent;
+  uploadBtn.textContent = 'Uploading...';
+  uploadBtn.disabled = true;
+
   try {
     // 1. Send file to backend
     const formData = new FormData();
-    formData.append("file", selectedFile); // name must match backend
+    formData.append("file", selectedFile);
 
-    const res = await fetch("http://127.0.0.1:8000/api/predict", {
+    // Use environment-aware URL
+    const isLocalhost = window.location.hostname === 'localhost' || 
+                       window.location.hostname === '127.0.0.1';
+    
+    const API_URL = isLocalhost
+      ? 'http://127.0.0.1:8000/api/predict'
+      : 'https://ibcs-6aig.onrender.com/api/predict'; // Replace with your actual deployed backend URL
+
+    console.log('Uploading to:', API_URL);
+
+    const res = await fetch(API_URL, {
       method: "POST",
       body: formData
     });
 
     if (!res.ok) {
-      alert("Server error while calling /api/predict");
-      return;
+      const errorText = await res.text();
+      console.error('Server error:', errorText);
+      throw new Error(`Server responded with ${res.status}: ${errorText}`);
     }
 
     const data = await res.json();
+    console.log('Upload successful:', data);
 
     // 2. Store image + result, then redirect
     const reader = new FileReader();
@@ -256,14 +274,28 @@ async function uploadFile() {
       window.location.href = "Website_feedback.html";
     };
 
+    reader.onerror = function() {
+      throw new Error("Failed to read image file");
+    };
+
     reader.readAsDataURL(selectedFile);
+
   } catch (err) {
-    console.error(err);
-    alert("Something went wrong while uploading.");
+    console.error("Upload error:", err);
+    
+    // More specific error messages
+    if (err.message.includes("Failed to fetch") || err.message.includes("NetworkError")) {
+      alert("Cannot connect to server. Please check:\n1. Backend server is running\n2. Correct URL is configured\n3. No CORS issues");
+    } else {
+      alert("Upload failed: " + err.message);
+    }
+    
+    // Reset button
+    uploadBtn.textContent = originalText;
+    uploadBtn.disabled = false;
   }
 }
 </script>
-
 
 
 </body>

@@ -1,0 +1,24 @@
+# FastAPI & Server
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+gunicorn==21.2.0
+python-multipart==0.0.6
+
+# PyTorch (CPU version - smaller, works on Render free tier)
+torch==2.1.2
+torchvision==0.16.2
+
+# Pillow for image processing
+pillow==10.1.0
+
+# Pydantic for data validation
+pydantic==2.5.0
+pydantic-settings==2.1.0
+
+# NumPy
+numpy==1.24.3
+
+# Python dotenv for environment variables
+python-dotenv==1.0.0
+
+
