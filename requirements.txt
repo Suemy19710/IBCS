@@ -4,9 +4,9 @@ uvicorn[standard]==0.24.0
 gunicorn==21.2.0
 python-multipart==0.0.6
 
-# PyTorch (CPU version - smaller, works on Render free tier)
-torch==2.5.1
-torchvision==0.20.1
+# PyTorch (CPU version)
+torch==2.7.0
+torchvision==0.22.0
 
 # Pillow for image processing
 pillow==10.1.0
