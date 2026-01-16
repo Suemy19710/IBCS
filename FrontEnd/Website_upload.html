@@ -227,20 +227,50 @@ cameraInput.addEventListener("change", () => {
 });
 
 /* UPLOAD BUTTON */
-function uploadFile() {
+async function uploadFile() {
   if (!selectedFile) {
     alert("Please select or capture an image first.");
     return;
   }
 
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    sessionStorage.setItem("uploadedImage", e.target.result);
-    window.location.href = "Website_feedback.html";
-  };
+  try {
+    // 1. Put the image file in FormData
+    const formData = new FormData();
+    // "file" should match what your backend expects, e.g. request.files["file"]
+    formData.append("file", selectedFile);
 
-  reader.readAsDataURL(selectedFile);
+    // 2. Call your API
+    const res = await fetch("http://localhost:8000/predict", {
+      method: "POST",
+      body: formData
+    });
+
+    if (!res.ok) {
+      alert("Server error while calling /predict.");
+      return;
+    }
+
+    const data = await res.json();
+
+    // 3. Store API result + image preview in sessionStorage, then redirect
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      // base64 image for preview on the feedback page
+      sessionStorage.setItem("uploadedImage", e.target.result);
+      // model result from backend
+      sessionStorage.setItem("modelResult", JSON.stringify(data));
+
+      window.location.href = "Website_feedback.html";
+    };
+
+    reader.readAsDataURL(selectedFile);
+
+  } catch (err) {
+    console.error(err);
+    alert("Something went wrong while uploading.");
+  }
 }
+
 </script>
 
 </body>

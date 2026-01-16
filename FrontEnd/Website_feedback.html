@@ -168,6 +168,9 @@
   overflow-wrap: break-word;
   flex-direction: column;
 }
+.good { border-left: 4px solid #4CAF50; padding-left:12px; }
+.bad  { border-left: 4px solid #E53935; padding-left:12px; }
+
 
   </style>
 </head>
@@ -221,24 +224,40 @@ const textBox = document.querySelector(".text-box");
 
 if (resultRaw) {
     const result = JSON.parse(resultRaw);
+    const fbHTML = Array.isArray(result.feedback)
+        ? result.feedback.map(line => `<p>${line}</p>`).join("")
+        : `<p>${result.feedback}</p>`;
+    // if (result.label === "Compliant") {
+    //     textBox.classList.add("good");
+    // } else {
+    //     textBox.classList.add("bad");
+    // }
     textBox.innerHTML = `
         <div>
-            <p><strong>This dashboard is:</strong> ${result.label}</p>
-            <p><strong>The rule it is breaking:</strong> ${result.rule}</p>
-            <p><strong>Feedback:</strong> ${result.feedback}</p>
+            <p><strong>Status:</strong> ${result.label}</p>
+            <p><strong>Detected axis issues:</strong> ${result.rule}</p>
+            <p><strong>Confidence:</strong> ${(result.confidence * 100).toFixed(1)}%</p>
+            <h4>IBCS Feedback:</h4>
+            ${fbHTML}
+            <span class="fb-readmore">Read more: 
+              <a href="https://www.ibcs.com/resource/top-and-bottom-5-of-international-business-communication-standards/" target="_blank">IBCS Resource</a>
+            </span>
         </div>
     `;
 } else {
-  textBox.innerHTML = `
-    <p class="fb-title">The uploaded image is not compliant with the 'Starts at 0' rule.</p>
+      textBox.innerHTML = `
+        <p>No model results found.</p>
+    `;
+  // textBox.innerHTML = `
+  //   <p class="fb-title">The uploaded image is not compliant with the 'Starts at 0' rule.</p>
 
-    <p class="fb-body">
-      Make sure the scales in your charts are consistent. This means that the values are represented fairly, so people can compare numbers accurately. For example, bar and column charts should usually start at zero, unless there’s a good reason not to (and it's clearly labeled). If you show several charts together, make sure their scales match so viewers can easily compare them without being misled.<br><br>
-      <span class="fb-readmore">Read more: 
-        <a href="https://example.com" target="_blank">IBCS Resource</a>
-      </span>
-    </p>
-  `;
+  //   <p class="fb-body">
+  //     Make sure the scales in your charts are consistent. This means that the values are represented fairly, so people can compare numbers accurately. For example, bar and column charts should usually start at zero, unless there’s a good reason not to (and it's clearly labeled). If you show several charts together, make sure their scales match so viewers can easily compare them without being misled.<br><br>
+  //     <span class="fb-readmore">Read more: 
+  //       <a href="https://www.ibcs.com/resource/top-and-bottom-5-of-international-business-communication-standards/" target="_blank">IBCS Resource</a>
+  //     </span>
+  //   </p>
+  // `;
 }
 
 </script>
