@@ -23,7 +23,7 @@ app.add_middleware(
     allow_origins=[
         "https://ibcs-tau.vercel.app",
         "http://localhost:8000",  # For local development
-        "http://127.0.0.1:000",
+        "http://127.0.0.1:8000",
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE"],
