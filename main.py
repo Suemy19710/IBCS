@@ -286,11 +286,15 @@ async def predict(file: UploadFile = File(...)):
 # Run server
 # -------------------------
 if __name__ == "__main__":
+    import os
+    import uvicorn
+    
     port = int(os.environ.get("PORT", 8000))
-    logger.info(f"Starting server on port {port}")
+    print(f"Starting server on port {port}")
+    
     uvicorn.run(
-        app, 
-        host="0.0.0.0", 
+        "main:app", 
+        host="0.0.0.0",  
         port=port,
         log_level="info"
     )
