@@ -204,179 +204,141 @@ const dropZone = document.getElementById("dropZone");
 const fileInput = document.getElementById("fileInput");
 const cameraInput = document.getElementById("cameraInput");
 const fileNameDisplay = document.getElementById("fileName");
-
 const webcamModal = document.getElementById("webcamModal");
 const webcamVideo = document.getElementById("webcamVideo");
 
 let selectedFile = null;
 let webcamStream = null;
 
-/* CLICK TO OPEN FILE PICKER */
+/* FILE SELECTION */
 dropZone.addEventListener("click", () => fileInput.click());
+fileInput.addEventListener("change", () => handleFileSelect(fileInput.files[0]));
+cameraInput.addEventListener("change", () => handleFileSelect(cameraInput.files[0]));
 
-/* FILE PICKER */
-fileInput.addEventListener("change", () => {
-  if (fileInput.files.length) {
-    selectedFile = fileInput.files[0];
-    fileNameDisplay.textContent = selectedFile.name;
-  }
-});
+function handleFileSelect(file) {
+    if (file) {
+        selectedFile = file;
+        fileNameDisplay.textContent = file.name || "Photo captured";
+    }
+}
 
-/* DRAG & DROP */
-dropZone.addEventListener("dragover", e => {
-  e.preventDefault();
-  dropZone.classList.add("dragover");
-});
-
-dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragover"));
-
-dropZone.addEventListener("drop", e => {
-  e.preventDefault();
-  dropZone.classList.remove("dragover");
-  const file = e.dataTransfer.files[0];
-  if (!file || !file.type.startsWith("image/")) {
-    alert("Please drop a valid image file.");
-    return;
-  }
-  selectedFile = file;
-  fileNameDisplay.textContent = file.name;
-});
-
-/* CAMERA INPUT (MOBILE NATIVE CAPTURE) */
-cameraInput.addEventListener("change", () => {
-  if (cameraInput.files.length) {
-    selectedFile = cameraInput.files[0];
-    fileNameDisplay.textContent = selectedFile.name || "Photo captured";
-  }
-});
-
-/* OPEN CAMERA: mobile = native, desktop = webcam modal */
+/* OPEN CAMERA: Logic for Mobile vs Desktop */
 function openCamera() {
-  if (/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) {
-    // Mobile – use native camera via file input
-    cameraInput.click();
-  } else {
-    // Desktop – open webcam modal
-    webcamModal.style.display = "flex";
-    navigator.mediaDevices.getUserMedia({ video: true }).then(stream => {
-      webcamStream = stream;
-      webcamVideo.srcObject = stream;
-    }).catch(err => {
-      console.error("Error accessing webcam:", err);
-      alert("Unable to access webcam.");
-    });
-  }
+    if (/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) {
+        cameraInput.click(); // Uses phone's native high-res camera
+    } else {
+        webcamModal.style.display = "flex";
+        navigator.mediaDevices.getUserMedia({ video: true }).then(stream => {
+            webcamStream = stream;
+            webcamVideo.srcObject = stream;
+        }).catch(err => {
+            alert("Unable to access webcam.");
+        });
+    }
 }
 
-/* CAPTURE PHOTO FROM DESKTOP WEBCAM */
+/* DESKTOP WEBCAM CAPTURE */
 function captureDesktopPhoto() {
-  const canvas = document.createElement("canvas");
-  canvas.width = webcamVideo.videoWidth;
-  canvas.height = webcamVideo.videoHeight;
-  canvas.getContext("2d").drawImage(webcamVideo, 0, 0);
-
-  canvas.toBlob(blob => {
-    selectedFile = new File([blob], "webcam_photo.png", { type: "image/png" });
-    fileNameDisplay.textContent = selectedFile.name;
-    closeWebcam();
-  });
+    const canvas = document.createElement("canvas");
+    canvas.width = webcamVideo.videoWidth;
+    canvas.height = webcamVideo.videoHeight;
+    canvas.getContext("2d").drawImage(webcamVideo, 0, 0);
+    canvas.toBlob(blob => {
+        selectedFile = new File([blob], "webcam_photo.jpg", { type: "image/jpeg" });
+        fileNameDisplay.textContent = "Webcam photo ready";
+        closeWebcam();
+    }, "image/jpeg", 0.8);
 }
 
-/* CLOSE WEBCAM MODAL */
 function closeWebcam() {
-  webcamModal.style.display = "none";
-  if (webcamStream) {
-    webcamStream.getTracks().forEach(t => t.stop());
-    webcamStream = null;
-  }
+    webcamModal.style.display = "none";
+    if (webcamStream) {
+        webcamStream.getTracks().forEach(t => t.stop());
+        webcamStream = null;
+    }
 }
 
-/* UPLOAD BUTTON: camera + API + redirect */
-async function uploadFile() {
-  if (!selectedFile) {
-    alert("Please select or capture an image first.");
-    return;
-  }
+/* --- THE COMPRESSION ENGINE (Fixes the Mobile "Upload Fail") --- */
+async function compressImage(file) {
+    return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (e) => {
+            const img = new Image();
+            img.src = e.target.result;
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const MAX_WIDTH = 1024; // Good balance for YOLO/MobileNet
+                let width = img.width;
+                let height = img.height;
 
-  // Show loading state (expects a button with class "btn-upload")
-  const uploadBtn = document.querySelector('.btn-upload');
-  let originalText = '';
-  if (uploadBtn) {
-    originalText = uploadBtn.textContent;
-    uploadBtn.textContent = 'Uploading...';
-    uploadBtn.disabled = true;
-  }
+                if (width > MAX_WIDTH) {
+                    height *= MAX_WIDTH / width;
+                    width = MAX_WIDTH;
+                }
 
-  try {
-    // 1. Send file to backend
-    const formData = new FormData();
-    formData.append("file", selectedFile);
-
-    const isLocal = window.location.hostname === 'localhost' || 
-                          window.location.hostname === '127.0.0.1';
-    // let API_URL
-    // if (isLocalhost) {
-    //   API_URL = 'http://127.0.0.1:3000/api/predict';
-    // } else if (window.location.hostname === '127.0.0.1' || window.location.hostname === '0.0.0.0') {
-    //   API_URL = 'https://127.0.0.1:8000/api/predict';
-    // } else {
-    //   API_URL = 'https://ibcs-6aig.onrender.com/api/predict';
-    // }
-    
-    const API_URL = isLocal
-      ? 'http://127.0.0.1:8000/api/predict'          // local FastAPI
-      : 'https://ibcs-6aig.onrender.com/api/predict'; // Render
-
-    console.log('Uploading to:', API_URL);
-
-
-
-    const res = await fetch(API_URL, {
-      method: "POST",
-      body: formData
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                canvas.toBlob((blob) => {
+                    resolve(new File([blob], file.name, { type: "image/jpeg" }));
+                }, "image/jpeg", 0.7);
+            };
+        };
     });
+}
 
-    if (!res.ok) {
-      const errorText = await res.text();
-      console.error('Server error:', errorText);
-      throw new Error(`Server responded with ${res.status}: ${errorText}`);
+/* UPLOAD LOGIC */
+async function uploadFile() {
+    if (!selectedFile) {
+        alert("Please select or capture an image first.");
+        return;
     }
 
-    const data = await res.json();
-    console.log('Upload successful:', data);
+    const uploadBtn = document.querySelector('.btn-upload');
+    const originalText = uploadBtn.textContent;
+    uploadBtn.textContent = 'Processing...';
+    uploadBtn.disabled = true;
 
-    // 2. Store image + result, then redirect
-    const reader = new FileReader();
-    reader.onload = function(e) {
-      sessionStorage.setItem("uploadedImage", e.target.result);
-      sessionStorage.setItem("modelResult", JSON.stringify(data));
-      window.location.href = "Website_feedback.html";
-    };
+    try {
+        // STEP 1: Compress (Especially important for mobile photos!)
+        const processedFile = await compressImage(selectedFile);
+        
+        const formData = new FormData();
+        formData.append("file", processedFile);
 
-    reader.onerror = function() {
-      throw new Error("Failed to read image file");
-    };
+        const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        const API_URL = isLocal ? 'http://127.0.0.1:8000/api/predict' : 'https://ibcs-6aig.onrender.com/api/predict';
 
-    reader.readAsDataURL(selectedFile);
+        uploadBtn.textContent = 'Analyzing...';
+        
+        const res = await fetch(API_URL, {
+            method: "POST",
+            body: formData
+        });
 
-  } catch (err) {
-    console.error("Upload error:", err);
+        if (!res.ok) throw new Error(`Server Error: ${res.status}`);
 
-    // if (err.message.includes("Failed to fetch") || err.message.includes("NetworkError")) {
-    //   alert("Cannot connect to server. Please check:\n1. Backend server is running\n2. Correct URL is configured\n3. No CORS issues");
-    // } else {
-    //   alert("Upload failed: " + err.message);
-    // } 
+        const data = await res.json();
 
-    // Reset button state
-    if (uploadBtn) {
-      uploadBtn.textContent = originalText;
-      uploadBtn.disabled = false;
+        // STEP 2: Save and Redirect
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            sessionStorage.setItem("uploadedImage", e.target.result);
+            sessionStorage.setItem("modelResult", JSON.stringify(data));
+            window.location.href = "Website_feedback.html";
+        };
+        reader.readAsDataURL(processedFile);
+
+    } catch (err) {
+        console.error(err);
+        alert("Upload failed. The image might be too large or the server is busy.");
+        uploadBtn.textContent = originalText;
+        uploadBtn.disabled = false;
     }
-  }
 }
 </script>
-
 
 </body>
 </html>
