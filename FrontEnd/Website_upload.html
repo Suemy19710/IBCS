@@ -362,11 +362,11 @@ async function uploadFile() {
   } catch (err) {
     console.error("Upload error:", err);
 
-    if (err.message.includes("Failed to fetch") || err.message.includes("NetworkError")) {
-      alert("Cannot connect to server. Please check:\n1. Backend server is running\n2. Correct URL is configured\n3. No CORS issues");
-    } else {
-      alert("Upload failed: " + err.message);
-    }
+    // if (err.message.includes("Failed to fetch") || err.message.includes("NetworkError")) {
+    //   alert("Cannot connect to server. Please check:\n1. Backend server is running\n2. Correct URL is configured\n3. No CORS issues");
+    // } else {
+    //   alert("Upload failed: " + err.message);
+    // } 
 
     // Reset button state
     if (uploadBtn) {
