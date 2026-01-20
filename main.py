@@ -29,10 +29,12 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://ibcs-tau.vercel.app",
-        "http://localhost:8000",
+        "http://localhost:8000", # 8000 for deployed backend 
         "http://127.0.0.1:8000",
-        "http://localhost:3000",
+        "http://localhost:3000", # when running localhost main.py
         "http://127.0.0.1:3000",
+        "http://127.0.0.1:5500", # 5500 for frontend (not sure it works)
+
     ],
     allow_credentials=True,
     allow_methods=["*"],  # Allow all methods
