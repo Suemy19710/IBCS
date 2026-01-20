@@ -1,12 +1,14 @@
+from cProfile import label
 import io, os
 from typing import Optional, Dict, List
 from torchvision import transforms
 import torch
 import torch.nn.functional as F
-from torchvision import models
+from ultralytics import YOLO    
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from Notebook.core import create_mobilenet_rule_model, generate_feedback, CLASS_TO_RULE
 from PIL import Image
 import numpy as np
 import uvicorn
@@ -16,13 +18,6 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Import your custom modules
-try:
-    from Notebook.core import create_mobilenet_rule_model, generate_feedback, CLASS_TO_RULE
-except ImportError as e:
-    logger.error(f"Failed to import custom modules: {e}")
-    raise
-
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # -------------------------
@@ -30,7 +25,6 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # -------------------------
 app = FastAPI(title="IBCS Compliance API", version="1.0.0")
 
-# IMPROVED CORS Configuration - Must be added BEFORE routes
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -47,39 +41,59 @@ app.add_middleware(
 )
 
 # -------------------------
-# Load your PyTorch model
+# Model Storage
 # -------------------------
-def load_model_from_checkpoint(path: str):
-    try:
-        logger.info(f"Loading model from {path}")
-        model = create_mobilenet_rule_model()
-        if not os.path.exists(path):
-            raise FileNotFoundError(f"Checkpoint not found: {path}")
+models = {
+    "mobilenet": None, 
+    "yolo": None
+}
 
+YOLO_S1_CLASS_NAME = "non_zero_start"
+YOLO_S1_CLASS_ID = 1
+MOBILENET_CHECKPOINT_PATH = "./Checkpoints/mobilenet_rules.pth"
+YOLO_CHECKPOINT_PATH = "./Notebook/runs/detect/ibcs_v2/weights/best.pt"
+
+# Model  Loading
+# -------------------------
+def load_mobilenet(path: str):
+    if not os.path.exists(path):
+        logger.warning(f"MobileNet checkpoint not found at {path}")
+        raise FileNotFoundError(f"Checkpoint not found: {path}")
+    try:
+        model = create_mobilenet_rule_model()
         state = torch.load(path, map_location="cpu", weights_only=False)
         model.load_state_dict(state)
         model.to(DEVICE)
         model.eval()
-        logger.info(f"Model loaded successfully from {path}")
+        logger.info(f"MobileNet model loaded successfully from {path}")
         return model
     except Exception as e:
-        logger.error(f"Failed to load model: {e}")
+        logger.error(f"Failed to load MobileNet model: {e}")
         raise
 
-# Try to load model, but allow server to start even if it fails
-model = None
-try:
-    checkpoint_path = "./Checkpoints/mobilenet_rules.pth"
-    if os.path.exists(checkpoint_path):
-        model = load_model_from_checkpoint(checkpoint_path)
-    else:
-        logger.warning(f"Model checkpoint not found at {checkpoint_path}")
-except Exception as e:
-    logger.error(f"Cannot load model: {e}")
+def load_yolo(path: str):
+    if not os.path.exists(path):
+        logger.warning(f"YOLO model not found at {path}")
+        raise FileNotFoundError(f"YOLO model not found: {path}")
+    try:
+        model = YOLO(path)
+        logger.info(f"YOLO model loaded successfully from {path}")
+        return model
+    except Exception as e:
+        logger.error(f"Failed to load YOLO model: {e}")
+        raise
+
+# Load models at startup
+@app.on_event("startup")    
+async def startup_event():
+    logger.info("Server starting up... loading models")
+    models["mobilenet"] = load_mobilenet(MOBILENET_CHECKPOINT_PATH)
+    models["yolo"] = load_yolo(YOLO_CHECKPOINT_PATH)
+    logger.info("All models loaded successfully")
+
 
 # Image preprocessing for MobileNet (PyTorch)
 IMG_SIZE = 224
-
 preprocess = transforms.Compose([
     transforms.Resize((IMG_SIZE, IMG_SIZE)),
     transforms.ToTensor(),
@@ -88,15 +102,8 @@ preprocess = transforms.Compose([
         std=[0.229, 0.224, 0.225],
     ),
 ])
-
-def preprocess_image(image: Image.Image) -> torch.Tensor:
-    """Preprocess PIL image for model input"""
-    image = image.convert("RGB")
-    tensor = preprocess(image)
-    return tensor
-
 # -------------------------
-# Response schema
+# Prediction Logic
 # -------------------------
 class PredictionResponse(BaseModel):
     class_id: int
@@ -104,69 +111,94 @@ class PredictionResponse(BaseModel):
     confidence: float
     rule: Optional[str]
     feedback: List[str]
+    model_used: str 
 
 
 # -------------------------
 # Helper: process + predict
 # -------------------------
-def run_prediction(
-    image: Image.Image,
-    details_by_rule: Optional[Dict[str, Dict]] = None
-):
-    """Run model prediction on image"""
-    if model is None:
-        raise RuntimeError("Model not loaded")
-    
-    try:
-        # Preprocess image
-        img_tensor = preprocess_image(image).to(DEVICE).unsqueeze(0)
+def run_prediction(image: Image.Image):
+    image_rgb = image.convert("RGB")
 
-        # Run inference
+    # 1) YOLO first – S1_AxisNotZero
+    yolo_model = models["yolo"]
+    if yolo_model is not None:
+        try:
+            results = yolo_model(image_rgb, verbose=False)
+            for result in results:
+                boxes = result.boxes
+                if boxes is None:
+                    continue
+                for box in boxes:
+                    cls_id = int(box.cls.item())
+                    conf = float(box.conf.item())
+
+                    if cls_id == YOLO_S1_CLASS_ID and conf >= 0.6:
+                        return {
+                            "class_id": 1,
+                            "label": "Non-compliant",
+                            "rule": "S1_AxisNotZero",
+                            "confidence": conf,
+                            "feedback": [
+                                "YOLO detection: The axis does not start at zero. "
+                                "IBCS recommends starting value axes at zero to avoid distortion."
+                                "Document exceptions. If you don't start at zero for a good reason (e.g. medical doses), mention it in the title or subtitle."
+
+                            ],
+                            "model_used": "YOLO"
+                        }
+        except Exception as e:
+            logger.error(f"YOLO prediction error: {e}")
+
+    # 2) MobileNet – backup classifier (currently only S1 vs Compliant)
+    mobilenet = models["mobilenet"]
+    if mobilenet is not None:
+        img_tensor = preprocess(image_rgb).to(DEVICE).unsqueeze(0)
         with torch.no_grad():
-            logits = model(img_tensor)
+            logits = mobilenet(img_tensor)
             probs = F.softmax(logits, dim=1)[0]
             class_id = int(torch.argmax(probs).item())
             confidence = float(probs[class_id].item())
 
-        logger.info(f"Predicted class_id: {class_id}, confidence: {confidence:.3f}")
+        final_label = "Compliant"
+        final_rule = None
 
-        # Get label and rule
-        if class_id not in CLASS_TO_RULE:
-            logger.warning(f"Unknown class_id {class_id}, defaulting to non-compliant")
-            label = "Non-compliant"
-            rule = "Unknown"
-        else:
-            label, rule = CLASS_TO_RULE[class_id]
+        if class_id == 1 and confidence >= 0.5:
+            final_label = "Non-compliant"
+            final_rule = "S1_AxisNotZero"
+        elif class_id in [2, 3, 4, 5]:
+            logger.info(
+                f"MobileNet predicted non-S1 class {class_id}, "
+                f"but overridden to Compliant in current version."
+            )
+            final_label = "Compliant"
+            final_rule = None
+        elif class_id == 0:
+            final_label = "Compliant"
+            final_rule = None
 
-        logger.info(f"Label: {label}, Rule: {rule}")
-
-        # Generate rule-based feedback
+        # Prepare feedback as a list of strings
         try:
-            if label == "Compliant":
-                fb = generate_feedback("IBCS", label, confidence)
-            else:
-                rule_details = None
-                if details_by_rule and rule and rule in details_by_rule:
-                    rule_details = details_by_rule[rule]
-                fb = generate_feedback(rule if rule else "Unknown", label, confidence, rule_details)
-            
-            feedback = fb.get("feedback", [])
+            fb_dict = generate_feedback(final_rule, final_label, confidence)
+            feedback = fb_dict.get("feedback", [])
         except Exception as e:
             logger.warning(f"Feedback generation failed: {e}")
             feedback = [
-                f"Classification: {label}",
+                f"Classification: {final_label}",
                 f"Confidence: {confidence:.2%}",
-                f"Rule: {rule if rule else 'N/A'}"
+                f"Rule: {final_rule if final_rule else 'N/A'}",
             ]
 
-        return class_id, label, rule, confidence, feedback
-    
-    except Exception as e:
-        logger.error(f"Prediction failed: {str(e)}")
-        import traceback 
-        traceback.print_exc()
-        raise
+        return {
+            "class_id": 1 if final_rule else 0,  # 0=Compliant, 1=Non-compliant
+            "label": final_label,
+            "rule": final_rule if final_rule else "Compliant",
+            "confidence": confidence,
+            "feedback": feedback,
+            "model_used": "MobileNet"
+        }
 
+    raise RuntimeError("No models available to process request")
 
 # -------------------------
 # API endpoints
@@ -175,11 +207,11 @@ def run_prediction(
 async def root():
     """Health check endpoint"""
     return {
-        "status": "ok" if model is not None else "degraded",
+        "status": "ok" if models["mobilenet"] is not None else "degraded",
         "message": "IBCS Compliance API is running",
-        "model_loaded": model is not None,
+        "model_loaded": models["mobilenet"] is not None,
         "device": str(DEVICE),
-        "num_classes": len(CLASS_TO_RULE) if model is not None else 0
+        "num_classes": len(CLASS_TO_RULE) if models["mobilenet"] is not None else 0
     }
 
 
@@ -187,114 +219,32 @@ async def root():
 async def health():
     """Detailed health check"""
     return {
-        "status": "healthy" if model is not None else "unhealthy",
-        "model_loaded": model is not None,
+        "status": "healthy" if models["mobilenet"] is not None else "unhealthy",
+        "model_loaded": models["mobilenet"] is not None,
         "device": str(DEVICE),
         "checkpoint_exists": os.path.exists("./Checkpoints/mobilenet_rules.pth")
     }
 
-
-@app.get("/api/classes")
-async def get_classes():
-    """Get available classification classes"""
-    return {
-        "classes": CLASS_TO_RULE,
-        "device": str(DEVICE),
-        "model_loaded": model is not None
-    }
-
-
 @app.post("/api/predict", response_model=PredictionResponse)
 async def predict(file: UploadFile = File(...)):
-    """
-    Predict IBCS compliance from uploaded chart image
-    """
-    # Check if model is loaded
-    if model is None:
-        logger.error("Prediction attempted with no model loaded")
-        raise HTTPException(
-            status_code=503, 
-            detail="Model not loaded. Service unavailable."
-        )
-    
+    if not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="File must be an image.")
+
+    contents = await file.read()
     try:
-        logger.info(f"Received file: {file.filename}, type: {file.content_type}")
-        
-        # Validate content type
-        if not file.content_type or not file.content_type.startswith("image/"):
-            raise HTTPException(status_code=400, detail="File must be an image.")
-
-        # Read file contents
-        contents = await file.read()
-        logger.info(f"File size: {len(contents)} bytes")
-
-        # Convert to PIL image
-        try:
-            image = Image.open(io.BytesIO(contents)).convert("RGB")
-            logger.info(f"Image opened successfully: {image.size}")
-        except Exception as e:
-            logger.error(f"Failed to open image: {str(e)}")
-            raise HTTPException(status_code=400, detail="Invalid image file.")
-
-        # Sample rule details (replace with actual detection logic)
-        fake_details = {
-            "S1_AxisNotZero": {
-                "violations": ["non_zero_start"]
-            },
-            "S2_UnequalTickSpacing": {
-                "violations": ["irregular_ticks"]
-            },
-            "S3_DistortedScaleRange": {
-                "violations": ["inconsistent_range", "overzoomed"]
-            },
-            "S4_MissingAxisValues": {
-                "violations": ["missing_units", "too_few_labels"]
-            },
-            "S5_MisusedDualAxis": {
-                "violations": ["unlabeled_secondary_axis", "confusing_overlap"]
-            },
-        }
-
-        # Run prediction
-        class_id, label, rule, confidence, feedback = run_prediction(
-            image, details_by_rule=fake_details
-        )
-
-        logger.info(f"Prediction successful: {label} (confidence: {confidence:.3f})")
-
-        return PredictionResponse(
-            class_id=class_id,
-            label=label,
-            rule=rule if rule else "unknown",
-            confidence=confidence,
-            feedback=feedback
-        )
-    
-    except HTTPException:
-        raise
+        image = Image.open(io.BytesIO(contents))
+        result = run_prediction(image)
+        return result
     except Exception as e:
-        logger.error(f"Endpoint error: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=500, 
-            detail=f"Internal server error: {str(e)}"
-        )
+        logger.error(f"Prediction error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/health")
+async def health():
+    # Lightweight endpoint for UptimeRobot to ping
+    return {"status": "alive", "models": {k: v is not None for k, v in models.items()}}
 
-# -------------------------
-# Run server
-# -------------------------
 if __name__ == "__main__":
-    import os
     import uvicorn
-    
     port = int(os.environ.get("PORT", 8000))
-    print(f"Starting server on port {port}")
-    
-    uvicorn.run(
-        "main:app", 
-        host="0.0.0.0",  
-        port=port,
-        log_level="info"
-    )
+    uvicorn.run("main:app", host="0.0.0.0", port=port)
