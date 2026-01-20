@@ -244,11 +244,6 @@ async def predict(file: UploadFile = File(...)):
         logger.error(f"Prediction error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/health")
-async def health():
-    # Lightweight endpoint for UptimeRobot to ping
-    return {"status": "alive", "models": {k: v is not None for k, v in models.items()}}
-
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
