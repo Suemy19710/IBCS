@@ -167,136 +167,152 @@
 </div>
 
 <script>
-  const dropZone = document.getElementById("dropZone");
+const dropZone = document.getElementById("dropZone");
 const fileInput = document.getElementById("fileInput");
 const cameraInput = document.getElementById("cameraInput");
 const fileNameDisplay = document.getElementById("fileName");
 
 let selectedFile = null;
 
-/* CLICK TO OPEN FILE PICKER */
-dropZone.addEventListener("click", () => {
-  fileInput.click();
-});
+/* FILE SELECTION LOGIC */
+dropZone.addEventListener("click", () => fileInput.click());
 
-/* FILE PICKER (gallery / files) */
-fileInput.addEventListener("change", () => {
-  if (fileInput.files.length > 0) {
-    selectedFile = fileInput.files[0];
-    fileNameDisplay.textContent = selectedFile.name;
-  }
-});
+fileInput.addEventListener("change", () => handleFileSelect(fileInput.files[0]));
+cameraInput.addEventListener("change", () => handleFileSelect(cameraInput.files[0]));
 
-/* DRAG & DROP */
+function openCamera() {
+    cameraInput.click();
+}
+
+function handleFileSelect(file) {
+    if (file && file.type.startsWith("image/")) {
+        selectedFile = file;
+        fileNameDisplay.textContent = file.name || "Photo captured";
+    }
+}
+
+/* DRAG & DROP LOGIC */
 dropZone.addEventListener("dragover", (e) => {
-  e.preventDefault();
-  dropZone.classList.add("dragover");
+    e.preventDefault();
+    dropZone.classList.add("dragover");
 });
 
-dropZone.addEventListener("dragleave", () => {
-  dropZone.classList.remove("dragover");
-});
+dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragover"));
 
 dropZone.addEventListener("drop", (e) => {
-  e.preventDefault();
-  dropZone.classList.remove("dragover");
-
-  const file = e.dataTransfer.files[0];
-  if (!file || !file.type.startsWith("image/")) {
-    alert("Please drop a valid image file.");
-    return;
-  }
-
-  selectedFile = file;
-  fileNameDisplay.textContent = file.name;
+    e.preventDefault();
+    dropZone.classList.remove("dragover");
+    handleFileSelect(e.dataTransfer.files[0]);
 });
 
-/* CAMERA MODE (native capture on phone) */
-function openCamera() {
-  cameraInput.click();
+/* --- IMAGE COMPRESSION (The Fix for Mobile Crashes) --- */
+async function compressImage(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (event) => {
+            const img = new Image();
+            img.src = event.target.result;
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                
+                // Max dimensions for AI processing
+                const MAX_WIDTH = 1024; 
+                let width = img.width;
+                let height = img.height;
+
+                if (width > height) {
+                    if (width > MAX_WIDTH) {
+                        height *= MAX_WIDTH / width;
+                        width = MAX_WIDTH;
+                    }
+                } else {
+                    if (height > MAX_WIDTH) {
+                        width *= MAX_WIDTH / height;
+                        height = MAX_WIDTH;
+                    }
+                }
+
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+
+                // Convert to Blob (JPEG 0.7 quality saves massive RAM)
+                canvas.toBlob((blob) => {
+                    if (blob) {
+                        resolve(new File([blob], file.name, { type: "image/jpeg" }));
+                    } else {
+                        reject(new Error("Canvas to Blob failed"));
+                    }
+                }, "image/jpeg", 0.7);
+            };
+        };
+        reader.onerror = (err) => reject(err);
+    });
 }
 
-/* When a photo is taken via cameraInput */
-cameraInput.addEventListener("change", () => {
-  if (cameraInput.files.length > 0) {
-    selectedFile = cameraInput.files[0];
-    fileNameDisplay.textContent = selectedFile.name || "Photo captured";
-  }
-});
-
-/* UPLOAD BUTTON: camera + API + redirect */
+/* UPLOAD AND PREDICT */
 async function uploadFile() {
-  if (!selectedFile) {
-    alert("Please select or capture an image first.");
-    return;
-  }
-
-  // Show loading state
-  const uploadBtn = document.querySelector('.btn-upload');
-  const originalText = uploadBtn.textContent;
-  uploadBtn.textContent = 'Uploading...';
-  uploadBtn.disabled = true;
-
-  try {
-    // 1. Send file to backend
-    const formData = new FormData();
-    formData.append("file", selectedFile);
-
-    // Use environment-aware URL
-    const isLocalhost = window.location.hostname === 'localhost' || 
-                       window.location.hostname === '127.0.0.1';
-    
-    const API_URL = isLocalhost
-      ? 'http://127.0.0.1:8000/api/predict'
-      : 'https://ibcs-6aig.onrender.com/api/predict'; // Replace with your actual deployed backend URL
-
-    console.log('Uploading to:', API_URL);
-
-    const res = await fetch(API_URL, {
-      method: "POST",
-      body: formData
-    });
-
-    if (!res.ok) {
-      const errorText = await res.text();
-      console.error('Server error:', errorText);
-      throw new Error(`Server responded with ${res.status}: ${errorText}`);
+    if (!selectedFile) {
+        alert("Please select or capture an image first.");
+        return;
     }
 
-    const data = await res.json();
-    console.log('Upload successful:', data);
-
-    // 2. Store image + result, then redirect
-    const reader = new FileReader();
-    reader.onload = function(e) {
-      sessionStorage.setItem("uploadedImage", e.target.result);
-      sessionStorage.setItem("modelResult", JSON.stringify(data));
-      window.location.href = "Website_feedback.html";
-    };
-
-    reader.onerror = function() {
-      throw new Error("Failed to read image file");
-    };
-
-    reader.readAsDataURL(selectedFile);
-
-  } catch (err) {
-    console.error("Upload error:", err);
+    const uploadBtn = document.querySelector('.btn-upload');
+    const originalText = uploadBtn.textContent;
     
-    // More specific error messages
-    if (err.message.includes("Failed to fetch") || err.message.includes("NetworkError")) {
-      alert("Cannot connect to server. Please check:\n1. Backend server is running\n2. Correct URL is configured\n3. No CORS issues");
-    } else {
-      alert("Upload failed: " + err.message);
+    uploadBtn.textContent = 'Compressing...';
+    uploadBtn.disabled = true;
+
+    try {
+        // 1. Compress image before sending to Render
+        const processedFile = await compressImage(selectedFile);
+        
+        const formData = new FormData();
+        formData.append("file", processedFile);
+
+        const isLocalhost = window.location.hostname === 'localhost' || 
+                           window.location.hostname === '127.0.0.1';
+        
+        const API_URL = isLocalhost
+            ? 'http://127.0.0.1:8000/api/predict'
+            : 'https://ibcs-6aig.onrender.com/api/predict';
+
+        uploadBtn.textContent = 'Analyzing...';
+        console.log('Sending to:', API_URL);
+
+        // 2. Network Request
+        const res = await fetch(API_URL, {
+            method: "POST",
+            body: formData
+        });
+
+        if (!res.ok) {
+            const errorMsg = await res.text();
+            throw new Error(errorMsg || `Server Error (${res.status})`);
+        }
+
+        const data = await res.json();
+
+        // 3. Save to Session and Redirect
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            sessionStorage.setItem("uploadedImage", e.target.result);
+            sessionStorage.setItem("modelResult", JSON.stringify(data));
+            window.location.href = "Website_feedback.html";
+        };
+        reader.readAsDataURL(processedFile);
+
+    } catch (err) {
+        console.error("Upload error:", err);
+        alert("Upload failed: " + err.message);
+        
+        uploadBtn.textContent = originalText;
+        uploadBtn.disabled = false;
     }
-    
-    // Reset button
-    uploadBtn.textContent = originalText;
-    uploadBtn.disabled = false;
-  }
 }
 </script>
-
 
 
 </body>
