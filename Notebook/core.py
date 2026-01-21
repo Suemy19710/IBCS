@@ -9,19 +9,14 @@ NUM_CLASSES = 6
 CLASS_TO_RULE = {
     0: ("Compliant", None),
     1: ("Non-compliant", "S1_AxisNotZero"),
-    2: ("Non-compliant", "S2_UnequalTickSpacing"),
-    3: ("Non-compliant", "S3_DistortedScaleRange"),
-    4: ("Non-compliant", "S4_MissingAxisValues"),
-    5: ("Non-compliant", "S5_MisusedDualAxis"),
+    2: ("Non-compliant", "S2_IBCSOverallRuleViolation"),
 }
 
 
 RULE_DESCRIPTIONS = {
     "S1_AxisNotZero": "Axis does not start at zero",
-    "S2_UnequalTickSpacing": "Unequal spacing between tick marks",
-    "S3_DistortedScaleRange": "Distorted or inconsistent scale ranges",
-    "S4_MissingAxisValues": "Missing or incomplete axis values",
-    "S5_MisusedDualAxis": "Misuse of dual axes",
+    "S2_IBCSOverallRuleViolation": "Overall IBCS rule violation",
+
 }
 def create_mobilenet_rule_model(num_classes: int = NUM_CLASSES):
     model = models.mobilenet_v3_small(pretrained=True)
@@ -70,64 +65,20 @@ def generate_feedback(rule: str, label: str, confidence: float, details: dict = 
             if "non_zero_start" in details.get("violations", []):
                 suggestions.insert(1, "Your axis seems to start above zero. This can mislead readers about the real magnitude of changes.")
 
-    # S2 – Unequal tick spacing
-    elif rule == "S2_UnequalTickSpacing":
+    # S2 – Overall IBCS Rule Violation
+    elif rule == "S2_IBCSOverallRuleViolation":
         suggestions.extend([
             f"Issue detected: {rule_desc}.",
-            "Keep tick marks evenly spaced for linear scales. Irregular spacing makes trends hard to read.",
-            "Check for mixed scales. Make sure you're not accidentally mixing log and linear behavior.",
-            "Use gridlines consistently so the gaps between values visually match the numeric distances."
+            "Follow IBCS standards for chart types, colors, labels, and layout to ensure clarity and consistency.",
+            "Use standardized symbols and notations as per IBCS guidelines.",
+            "Ensure all chart elements (titles, axes, legends) are clearly labeled and easy to understand."
         ])
         if details:
-            if "irregular_ticks" in details.get("violations", []):
-                suggestions.insert(1, "Irregular tick spacing detected. Align tick positions with their numeric values.")
-
-    # S3 – Distorted scale range
-    elif rule == "S3_DistortedScaleRange":
-        suggestions.extend([
-            f"Issue detected: {rule_desc}.",
-            "Use comparable ranges when comparing charts. If two charts compare the same metric, keep the same min/max.",
-            "Avoid extreme zooming on small ranges if it exaggerates noise.",
-            "Highlight truncated ranges clearly in the title or annotation so viewers know the scale is limited."
-        ])
-        if details:
-            v = details.get("violations", [])
-            if "inconsistent_range" in v:
-                suggestions.insert(1, "Different charts use different ranges for the same metric. Normalize the range to compare fairly.")
-            if "overzoomed" in v:
-                suggestions.insert(1, "The scale is very tight. Consider widening it to give more context.")
-
-    # S4 – Missing axis values
-    elif rule == "S4_MissingAxisValues":
-        suggestions.extend([
-            f"Issue detected: {rule_desc}.",
-            "Label your axes clearly. Make sure both axis titles and units are visible, e.g. `Revenue (kEUR)`.",
-            "Include enough tick labels so readers can estimate values, not just direction.",
-            "Avoid overlapping labels. Rotate or abbreviate labels rather than dropping them entirely."
-        ])
-        if details:
-            v = details.get("violations", [])
-            if "missing_units" in v:
-                suggestions.insert(1, "Units are missing on at least one axis. Add `(%)`, `(days)`, `(EUR)`, etc.")
-            if "too_few_labels" in v:
-                suggestions.insert(1, "Very few axis labels detected. Add more tick labels so values can be interpreted.")
-
-    # S5 – Misused dual axis
-    elif rule == "S5_MisusedDualAxis":
-        suggestions.extend([
-            f"Issue detected: {rule_desc}.",
-            "Avoid dual axes if possible. They are often confusing and easy to misread.",
-            "If you must use dual axes, use clearly different chart types (e.g. bars for one metric, line for the other).",
-            "Align the story, not the shapes. Make sure you're not implying correlation just because lines overlap.",
-            "Consider small multiples instead. Two simpler charts are often clearer than one complex dual-axis chart."
-        ])
-        if details:
-            v = details.get("violations", [])
-            if "unlabeled_secondary_axis" in v:
-                suggestions.insert(1, "The secondary axis is unlabeled. Add a clear title and units.")
-            if "confusing_overlap" in v:
-                suggestions.insert(1, "Lines/series overlap in a misleading way. Separate them or split into multiple charts.")
-
+            violations = details.get("violations", [])
+            if "wrong_chart_type" in violations:
+                suggestions.insert(1, "The chosen chart type may not be suitable for the data being presented. Consider using a different type that aligns with IBCS recommendations.")
+            if "color_scheme" in violations:
+                suggestions.insert(1, "The color scheme used does not conform to IBCS standards. Use the recommended colors for better readability and consistency.")
     # Fallback if we get an unknown rule code
     else:
         suggestions.append(
