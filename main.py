@@ -41,6 +41,12 @@ app.add_middleware(
     expose_headers=["*"],  # Expose all headers to the client
 )
 
+# For Render deployment
+if os.environ.get("RENDER", None):
+    import uvicorn
+    port = int(os.environ.get("PORT", 10000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
+
 # -------------------------
 # Model Storage
 # -------------------------
@@ -86,8 +92,16 @@ def load_yolo(path: str):
 # Load models at startup
 @app.on_event("startup")    
 async def startup_event():
-    models["mobilenet"] = load_mobilenet_keras(MOBILENET_KERAS_PATH)
-    models["yolo"] = load_yolo(YOLO_CHECKPOINT_PATH)
+    try: 
+        models["mobilenet"] = load_mobilenet_keras(MOBILENET_KERAS_PATH)
+    except Exception as e:  
+        logger.error(f"Error loading MobileNet model: {e}") 
+        models["mobilenet"] = None  
+    try:
+        models["yolo"] = load_yolo(YOLO_CHECKPOINT_PATH)
+    except Exception as e:
+        logger.error(f"Error loading YOLO model: {e}")
+        models["yolo"] = None   
 
 # Image preprocessing for MobileNet (PyTorch)
 IMG_SIZE = 224
@@ -213,5 +227,5 @@ async def predict(file: UploadFile = File(...)):
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.environ.get("PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port)
+    port = int(os.environ.get("PORT", 8000))  # Render provides PORT
+    uvicorn.run(app, host="0.0.0.0", port=port)
