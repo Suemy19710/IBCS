@@ -27,25 +27,12 @@ app.add_middleware(
             "http://127.0.0.1:5500",      # local frontend
             "http://localhost:5500",      # if Live Server uses this
             "https://ibcs-tau.vercel.app" # deployed frontend
-        # "https://ibcs-tau.vercel.app",
-        # "http://localhost:8000", # 8000 for deployed backend 
-        # "http://127.0.0.1:8000",
-        # "http://localhost:3000", # when running localhost main.py
-        # "http://127.0.0.1:3000",
-        # "http://127.0.0.1:5500", # 5500 for frontend (not sure it works)
-
     ],
     allow_credentials=True,
     allow_methods=["*"],  # Allow all methods
     allow_headers=["*"],  # Allow all headers
     expose_headers=["*"],  # Expose all headers to the client
 )
-
-# For Render deployment
-if os.environ.get("RENDER", None):
-    import uvicorn
-    port = int(os.environ.get("PORT", 10000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
 
 # -------------------------
 # Model Storage
@@ -92,6 +79,10 @@ def load_yolo(path: str):
 # Load models at startup
 @app.on_event("startup")    
 async def startup_event():
+    # Log the PORT environment variable for debugging
+    port = os.environ.get("PORT", "Not set")
+    logger.info(f"PORT environment variable: {port}")
+    
     try: 
         models["mobilenet"] = load_mobilenet_keras(MOBILENET_KERAS_PATH)
     except Exception as e:  
