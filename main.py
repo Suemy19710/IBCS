@@ -1,24 +1,27 @@
-from cProfile import label
 import io, os
 from typing import Optional, Dict, List
-from torchvision import transforms
-import torch
-import torch.nn.functional as F
+import numpy as np
+import tensorflow as tf
+from PIL import Image
 from ultralytics import YOLO    
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from Notebook.core import create_mobilenet_rule_model, generate_feedback, CLASS_TO_RULE
-from PIL import Image
-import numpy as np
-import uvicorn
+from Notebook.core import generate_feedback, CLASS_TO_RULE
 import logging
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# Log PORT at module level for debugging
+PORT = os.environ.get("PORT", "Not set")
+logger.info(f"PORT environment variable at startup: {PORT}")
+
+# DEVICE = tf.config.list_physical_devices("GPU") if tf.config.list_physical_devices("GPU") else tf.config.list_physical_devices("CPU")
+# DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+DEVICE = tf.config.list_physical_devices("CPU") if tf.config.list_physical_devices("GPU") else tf.config.list_physical_devices("CPU")
+logger.info(f"Using device: {DEVICE}")
 
 # -------------------------
 # FastAPI setup
@@ -28,21 +31,14 @@ app = FastAPI(title="IBCS Compliance API", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-            "http://127.0.0.1:5500",      # local frontend
-            "http://localhost:5500",      # if Live Server uses this
-            "https://ibcs-tau.vercel.app" # deployed frontend
-        # "https://ibcs-tau.vercel.app",
-        # "http://localhost:8000", # 8000 for deployed backend 
-        # "http://127.0.0.1:8000",
-        # "http://localhost:3000", # when running localhost main.py
-        # "http://127.0.0.1:3000",
-        # "http://127.0.0.1:5500", # 5500 for frontend (not sure it works)
-
+        "http://127.0.0.1:5500",
+        "http://localhost:5500",
+        "https://ibcs-tau.vercel.app"
     ],
     allow_credentials=True,
-    allow_methods=["*"],  # Allow all methods
-    allow_headers=["*"],  # Allow all headers
-    expose_headers=["*"],  # Expose all headers to the client
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # -------------------------
@@ -53,27 +49,25 @@ models = {
     "yolo": None
 }
 
-YOLO_S1_CLASS_NAME = "non_zero_start"
+# YOLO_S1_CLASS_NAME = "non_zero_start"
 YOLO_S1_CLASS_ID = 1
-MOBILENET_CHECKPOINT_PATH = "./Checkpoints/mobilenet_rules.pth"
+MOBILENET_KERAS_PATH = "./Checkpoints/mobilenet-21-01.keras"
 YOLO_CHECKPOINT_PATH = "./Notebook/runs/detect/ibcs_v2/weights/best.pt"
+YOLO_S1_CLASS_ID = 1
+YOLO_S2_CLASS_ID = 2 
 
-# Model  Loading
 # -------------------------
-def load_mobilenet(path: str):
+# Model Loading
+# -------------------------
+def load_mobilenet_keras(path: str):
     if not os.path.exists(path):
-        logger.warning(f"MobileNet checkpoint not found at {path}")
-        raise FileNotFoundError(f"Checkpoint not found: {path}")
+        raise FileNotFoundError(f"Keras model not found: {path}")
     try:
-        model = create_mobilenet_rule_model()
-        state = torch.load(path, map_location="cpu", weights_only=False)
-        model.load_state_dict(state)
-        model.to(DEVICE)
-        model.eval()
-        logger.info(f"MobileNet model loaded successfully from {path}")
+        model = tf.keras.models.load_model(path)
+        logger.info(f"MobileNet (Keras) loaded successfully from {path}")
         return model
     except Exception as e:
-        logger.error(f"Failed to load MobileNet model: {e}")
+        logger.error(f"Failed to load Keras model: {e}")
         raise
 
 def load_yolo(path: str):
@@ -91,22 +85,25 @@ def load_yolo(path: str):
 # Load models at startup
 @app.on_event("startup")    
 async def startup_event():
-    logger.info("Server starting up... loading models")
-    models["mobilenet"] = load_mobilenet(MOBILENET_CHECKPOINT_PATH)
-    models["yolo"] = load_yolo(YOLO_CHECKPOINT_PATH)
-    logger.info("All models loaded successfully")
+    try: 
+        models["mobilenet"] = load_mobilenet_keras(MOBILENET_KERAS_PATH)
+    except Exception as e:  
+        logger.error(f"Error loading MobileNet model: {e}") 
+        models["mobilenet"] = None  
+    try:
+        models["yolo"] = load_yolo(YOLO_CHECKPOINT_PATH)
+    except Exception as e:
+        logger.error(f"Error loading YOLO model: {e}")
+        models["yolo"] = None   
 
-
-# Image preprocessing for MobileNet (PyTorch)
+# Image preprocessing
 IMG_SIZE = 224
-preprocess = transforms.Compose([
-    transforms.Resize((IMG_SIZE, IMG_SIZE)),
-    transforms.ToTensor(),
-    transforms.Normalize(
-        mean=[0.485, 0.456, 0.406],
-        std=[0.229, 0.224, 0.225],
-    ),
-])
+def preprocess_for_keras(image: Image.Image):
+    img = image.resize((IMG_SIZE, IMG_SIZE))
+    img_array = np.array(img).astype('float32')
+    img_array = tf.keras.applications.mobilenet_v3.preprocess_input(img_array)
+    return np.expand_dims(img_array, axis=0)
+
 # -------------------------
 # Prediction Logic
 # -------------------------
@@ -118,111 +115,77 @@ class PredictionResponse(BaseModel):
     feedback: List[str]
     model_used: str 
 
-
-# -------------------------
-# Helper: process + predict
-# -------------------------
 def run_prediction(image: Image.Image):
     image_rgb = image.convert("RGB")
+    final_label, final_rule = CLASS_TO_RULE[0]
+    final_confidence = 0.0
+    model_pathway = "System Init"
 
-    # 1) YOLO first – S1_AxisNotZero
+    # MobileNet
+    mb_model = models["mobilenet"]
+    if mb_model:
+        img_batch = preprocess_for_keras(image_rgb)
+        preds = mb_model.predict(img_batch, verbose=0)
+        class_id = int(np.argmax(preds[0]))
+        confidence = float(preds[0][class_id])
+
+        if class_id in CLASS_TO_RULE:
+            final_label, final_rule = CLASS_TO_RULE[class_id]
+            final_confidence = confidence
+            model_pathway = f"MobileNet ({final_label})"
+
+    # YOLO
     yolo_model = models["yolo"]
-    if yolo_model is not None:
-        try:
-            results = yolo_model(image_rgb, verbose=False)
-            for result in results:
-                boxes = result.boxes
-                if boxes is None:
-                    continue
-                for box in boxes:
-                    cls_id = int(box.cls.item())
-                    conf = float(box.conf.item())
+    if yolo_model:
+        results = yolo_model(image_rgb, verbose=False)
+        yolo_rule_found = None
+        yolo_best_conf = 0.0
 
-                    if cls_id == YOLO_S1_CLASS_ID and conf >= 0.6:
-                        return {
-                            "class_id": 1,
-                            "label": "Non-compliant",
-                            "rule": "S1_AxisNotZero",
-                            "confidence": conf,
-                            "feedback": [
-                                "YOLO detection: The axis does not start at zero. "
-                                "IBCS recommends starting value axes at zero to avoid distortion."
-                                "Document exceptions. If you don't start at zero for a good reason (e.g. medical doses), mention it in the title or subtitle."
+        for result in results:
+            if not result.boxes: continue
+            for box in result.boxes:
+                cls_id, conf = int(box.cls.item()), float(box.conf.item())
+                
+                det_rule = None
+                if cls_id == YOLO_S1_CLASS_ID: det_rule = "S1_AxisNotZero"
+                elif cls_id == YOLO_S2_CLASS_ID: det_rule = "S2_IBCSOverallRuleViolation"
 
-                            ],
-                            "model_used": "YOLO"
-                        }
-        except Exception as e:
-            logger.error(f"YOLO prediction error: {e}")
+                if det_rule and conf >= 0.5 and conf > yolo_best_conf:
+                    yolo_rule_found = det_rule
+                    yolo_best_conf = conf
 
-    # 2) MobileNet – backup classifier (currently only S1 vs Compliant)
-    mobilenet = models["mobilenet"]
-    if mobilenet is not None:
-        img_tensor = preprocess(image_rgb).to(DEVICE).unsqueeze(0)
-        with torch.no_grad():
-            logits = mobilenet(img_tensor)
-            probs = F.softmax(logits, dim=1)[0]
-            class_id = int(torch.argmax(probs).item())
-            confidence = float(probs[class_id].item())
+        if yolo_rule_found:
+            final_label, final_rule, final_confidence = "Non-compliant", yolo_rule_found, yolo_best_conf
+            model_pathway += " -> YOLO Overrode"
 
-        final_label = "Compliant"
-        final_rule = None
+    feedback_data = generate_feedback(final_rule, final_label, final_confidence)
+    logger.info(f"Prediction: {final_label} ({final_rule}) with confidence {final_confidence:.2%} via {model_pathway}")
 
-        if class_id == 1 and confidence >= 0.5:
-            final_label = "Non-compliant"
-            final_rule = "S1_AxisNotZero"
-        elif class_id == 2:
-            logger.info(
-                f"MobileNet predicted non-S1 class {class_id}, "
-                f"but overridden to Compliant in current version."
-            )
-            final_label = "Compliant"
-            final_rule = None
-        elif class_id == 0:
-            final_label = "Compliant"
-            final_rule = None
-
-        # Prepare feedback as a list of strings
-        try:
-            fb_dict = generate_feedback(final_rule, final_label, confidence)
-            feedback = fb_dict.get("feedback", [])
-        except Exception as e:
-            logger.warning(f"Feedback generation failed: {e}")
-            feedback = [
-                f"Classification: {final_label}",
-                f"Confidence: {confidence:.2%}",
-                f"Rule: {final_rule if final_rule else 'N/A'}",
-            ]
-
-        return {
-            "class_id": 1 if final_rule else 0,  # 0=Compliant, 1=Non-compliant
-            "label": final_label,
-            "rule": final_rule if final_rule else "Compliant",
-            "confidence": confidence,
-            "feedback": feedback,
-            "model_used": "MobileNet"
-        }
-
-    raise RuntimeError("No models available to process request")
+    return {
+        "class_id": 1 if final_label == "Non-compliant" else 0,
+        "label": final_label,
+        "rule": final_rule or "N/A",
+        "confidence": final_confidence,
+        "feedback": feedback_data["feedback"],
+        "model_used": model_pathway
+    }
 
 # -------------------------
 # API endpoints
 # -------------------------
 @app.get("/")
 async def root():
-    """Health check endpoint"""
     return {
         "status": "ok" if models["mobilenet"] is not None else "degraded",
         "message": "IBCS Compliance API is running",
         "model_loaded": models["mobilenet"] is not None,
         "device": str(DEVICE),
-        "num_classes": len(CLASS_TO_RULE) if models["mobilenet"] is not None else 0
+        "num_classes": len(CLASS_TO_RULE) if models["mobilenet"] is not None else 0,
+        "port": os.environ.get("PORT", "Not set")
     }
-
 
 @app.get("/health")
 async def health():
-    """Detailed health check"""
     return {
         "status": "healthy" if models["mobilenet"] is not None else "unhealthy",
         "model_loaded": models["mobilenet"] is not None,
