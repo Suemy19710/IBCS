@@ -18,7 +18,10 @@ logger = logging.getLogger(__name__)
 PORT = os.environ.get("PORT", "Not set")
 logger.info(f"PORT environment variable at startup: {PORT}")
 
-DEVICE = tf.config.list_physical_devices("GPU") if tf.config.list_physical_devices("GPU") else tf.config.list_physical_devices("CPU")
+# DEVICE = tf.config.list_physical_devices("GPU") if tf.config.list_physical_devices("GPU") else tf.config.list_physical_devices("CPU")
+# DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+DEVICE = tf.config.list_physical_devices("CPU") if tf.config.list_physical_devices("GPU") else tf.config.list_physical_devices("CPU")
+logger.info(f"Using device: {DEVICE}")
 
 # -------------------------
 # FastAPI setup
@@ -207,5 +210,4 @@ async def predict(file: UploadFile = File(...)):
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
-    logger.info(f"Running in __main__ mode on port {port}")
     uvicorn.run("main:app", host="0.0.0.0", port=port, log_level="info")
