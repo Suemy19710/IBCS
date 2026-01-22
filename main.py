@@ -1,7 +1,7 @@
 import io, os
 from typing import Optional, Dict, List
 import numpy as np
-import tensorflow as tf  # Changed from torch
+import tensorflow as tf
 from PIL import Image
 from ultralytics import YOLO    
 from fastapi import FastAPI, UploadFile, File, HTTPException
@@ -14,6 +14,10 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Log PORT at module level for debugging
+PORT = os.environ.get("PORT", "Not set")
+logger.info(f"PORT environment variable at startup: {PORT}")
+
 DEVICE = tf.config.list_physical_devices("GPU") if tf.config.list_physical_devices("GPU") else tf.config.list_physical_devices("CPU")
 
 # -------------------------
@@ -24,21 +28,14 @@ app = FastAPI(title="IBCS Compliance API", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-            "http://127.0.0.1:5500",      # local frontend
-            "http://localhost:5500",      # if Live Server uses this
-            "https://ibcs-tau.vercel.app" # deployed frontend
-        # "https://ibcs-tau.vercel.app",
-        # "http://localhost:8000", # 8000 for deployed backend 
-        # "http://127.0.0.1:8000",
-        # "http://localhost:3000", # when running localhost main.py
-        # "http://127.0.0.1:3000",
-        # "http://127.0.0.1:5500", # 5500 for frontend (not sure it works)
-
+        "http://127.0.0.1:5500",
+        "http://localhost:5500",
+        "https://ibcs-tau.vercel.app"
     ],
     allow_credentials=True,
-    allow_methods=["*"],  # Allow all methods
-    allow_headers=["*"],  # Allow all headers
-    expose_headers=["*"],  # Expose all headers to the client
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # -------------------------
@@ -49,21 +46,20 @@ models = {
     "yolo": None
 }
 
-YOLO_S1_CLASS_NAME = "non_zero_start"
+# YOLO_S1_CLASS_NAME = "non_zero_start"
 YOLO_S1_CLASS_ID = 1
-MOBILENET_KERAS_PATH = "./Checkpoints/mobilenet-21-01.keras" # New path
+MOBILENET_KERAS_PATH = "./Checkpoints/mobilenet-21-01.keras"
 YOLO_CHECKPOINT_PATH = "./Notebook/runs/detect/ibcs_v2/weights/best.pt"
 YOLO_S1_CLASS_ID = 1
 YOLO_S2_CLASS_ID = 2 
 
 # -------------------------
-# Model  Loading
+# Model Loading
 # -------------------------
 def load_mobilenet_keras(path: str):
     if not os.path.exists(path):
         raise FileNotFoundError(f"Keras model not found: {path}")
     try:
-        # Loading the .keras file
         model = tf.keras.models.load_model(path)
         logger.info(f"MobileNet (Keras) loaded successfully from {path}")
         return model
@@ -86,22 +82,25 @@ def load_yolo(path: str):
 # Load models at startup
 @app.on_event("startup")    
 async def startup_event():
-    models["mobilenet"] = load_mobilenet_keras(MOBILENET_KERAS_PATH)
-    models["yolo"] = load_yolo(YOLO_CHECKPOINT_PATH)
+    try: 
+        models["mobilenet"] = load_mobilenet_keras(MOBILENET_KERAS_PATH)
+    except Exception as e:  
+        logger.error(f"Error loading MobileNet model: {e}") 
+        models["mobilenet"] = None  
+    try:
+        models["yolo"] = load_yolo(YOLO_CHECKPOINT_PATH)
+    except Exception as e:
+        logger.error(f"Error loading YOLO model: {e}")
+        models["yolo"] = None   
 
-# Image preprocessing for MobileNet (PyTorch)
+# Image preprocessing
 IMG_SIZE = 224
 def preprocess_for_keras(image: Image.Image):
-    """
-    Keras MobileNet expects (224, 224, 3) and values typically in [-1, 1] 
-    or [0, 1] depending on how you trained it.
-    """
     img = image.resize((IMG_SIZE, IMG_SIZE))
     img_array = np.array(img).astype('float32')
-    
     img_array = tf.keras.applications.mobilenet_v3.preprocess_input(img_array)
-    
-    return np.expand_dims(img_array, axis=0) # Shape: (1, 224, 224, 3)
+    return np.expand_dims(img_array, axis=0)
+
 # -------------------------
 # Prediction Logic
 # -------------------------
@@ -113,17 +112,13 @@ class PredictionResponse(BaseModel):
     feedback: List[str]
     model_used: str 
 
-
-# -------------------------
-# Helper: process + predict
-# -------------------------
 def run_prediction(image: Image.Image):
     image_rgb = image.convert("RGB")
     final_label, final_rule = CLASS_TO_RULE[0]
     final_confidence = 0.0
     model_pathway = "System Init"
 
-    # --- 1) MobileNet (Keras) ---
+    # MobileNet
     mb_model = models["mobilenet"]
     if mb_model:
         img_batch = preprocess_for_keras(image_rgb)
@@ -136,7 +131,7 @@ def run_prediction(image: Image.Image):
             final_confidence = confidence
             model_pathway = f"MobileNet ({final_label})"
 
-    # --- 2) YOLO (PyTorch) ---
+    # YOLO
     yolo_model = models["yolo"]
     if yolo_model:
         results = yolo_model(image_rgb, verbose=False)
@@ -156,7 +151,6 @@ def run_prediction(image: Image.Image):
                     yolo_rule_found = det_rule
                     yolo_best_conf = conf
 
-        # Override Logic
         if yolo_rule_found:
             final_label, final_rule, final_confidence = "Non-compliant", yolo_rule_found, yolo_best_conf
             model_pathway += " -> YOLO Overrode"
@@ -172,24 +166,23 @@ def run_prediction(image: Image.Image):
         "feedback": feedback_data["feedback"],
         "model_used": model_pathway
     }
+
 # -------------------------
 # API endpoints
 # -------------------------
 @app.get("/")
 async def root():
-    """Health check endpoint"""
     return {
         "status": "ok" if models["mobilenet"] is not None else "degraded",
         "message": "IBCS Compliance API is running",
         "model_loaded": models["mobilenet"] is not None,
         "device": str(DEVICE),
-        "num_classes": len(CLASS_TO_RULE) if models["mobilenet"] is not None else 0
+        "num_classes": len(CLASS_TO_RULE) if models["mobilenet"] is not None else 0,
+        "port": os.environ.get("PORT", "Not set")
     }
-
 
 @app.get("/health")
 async def health():
-    """Detailed health check"""
     return {
         "status": "healthy" if models["mobilenet"] is not None else "unhealthy",
         "model_loaded": models["mobilenet"] is not None,
@@ -214,4 +207,5 @@ async def predict(file: UploadFile = File(...)):
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port)
+    logger.info(f"Running in __main__ mode on port {port}")
+    uvicorn.run("main:app", host="0.0.0.0", port=port, log_level="info")
