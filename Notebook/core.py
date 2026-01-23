@@ -71,7 +71,6 @@ def generate_feedback(
         feedback["feedback"].append(
             f"Great! This visualization appears compliant with the expected charting rules. "
             f"Layout, readability, and structure look suitable. "
-            f"Confidence: {confidence:.0%}."
         )
         return feedback
 
