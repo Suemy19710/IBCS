@@ -1,27 +1,24 @@
+from cProfile import label
 import io, os
 from typing import Optional, Dict, List
-import numpy as np
-import tensorflow as tf
-from PIL import Image
+from torchvision import transforms
+import torch
+import torch.nn.functional as F
 from ultralytics import YOLO    
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from Notebook.core import generate_feedback, CLASS_TO_RULE
+from Notebook.core import create_mobilenet_rule_model, generate_feedback, CLASS_TO_RULE
+from PIL import Image
+import numpy as np
+import uvicorn
 import logging
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Log PORT at module level for debugging
-PORT = os.environ.get("PORT", "Not set")
-logger.info(f"PORT environment variable at startup: {PORT}")
-
-# DEVICE = tf.config.list_physical_devices("GPU") if tf.config.list_physical_devices("GPU") else tf.config.list_physical_devices("CPU")
-# DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-DEVICE = tf.config.list_physical_devices("CPU") if tf.config.list_physical_devices("GPU") else tf.config.list_physical_devices("CPU")
-logger.info(f"Using device: {DEVICE}")
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # -------------------------
 # FastAPI setup
@@ -31,14 +28,14 @@ app = FastAPI(title="IBCS Compliance API", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://127.0.0.1:5500",
-        "http://localhost:5500",
-        "https://ibcs-tau.vercel.app"
+            "http://127.0.0.1:5500",      # local frontend
+            "http://localhost:5500",      # if Live Server uses this
+            "https://ibcs-tau.vercel.app" # deployed frontend
     ],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["*"],
+    allow_methods=["*"],  # Allow all methods
+    allow_headers=["*"],  # Allow all headers
+    expose_headers=["*"],  # Expose all headers to the client
 )
 
 # -------------------------
@@ -49,25 +46,28 @@ models = {
     "yolo": None
 }
 
-# YOLO_S1_CLASS_NAME = "non_zero_start"
-YOLO_S1_CLASS_ID = 1
-MOBILENET_KERAS_PATH = "./Checkpoints/mobilenet-21-01.keras"
-YOLO_CHECKPOINT_PATH = "./Notebook/runs/detect/ibcs_v2/weights/best.pt"
+YOLO_S1_CLASS_NAME = "non_zero_start"
 YOLO_S1_CLASS_ID = 1
 YOLO_S2_CLASS_ID = 2 
+MOBILENET_CHECKPOINT_PATH = "./Checkpoints/mobilenet_rules.pth"
+YOLO_CHECKPOINT_PATH = "./Notebook/runs/detect/ibcs_v2/weights/best.pt"
 
+# Model  Loading
 # -------------------------
-# Model Loading
-# -------------------------
-def load_mobilenet_keras(path: str):
+def load_mobilenet(path: str):
     if not os.path.exists(path):
-        raise FileNotFoundError(f"Keras model not found: {path}")
+        logger.warning(f"MobileNet checkpoint not found at {path}")
+        raise FileNotFoundError(f"Checkpoint not found: {path}")
     try:
-        model = tf.keras.models.load_model(path)
-        logger.info(f"MobileNet (Keras) loaded successfully from {path}")
+        model = create_mobilenet_rule_model()
+        state = torch.load(path, map_location="cpu", weights_only=False)
+        model.load_state_dict(state)
+        model.to(DEVICE)
+        model.eval()
+        logger.info(f"MobileNet model loaded successfully from {path}")
         return model
     except Exception as e:
-        logger.error(f"Failed to load Keras model: {e}")
+        logger.error(f"Failed to load MobileNet model: {e}")
         raise
 
 def load_yolo(path: str):
@@ -85,25 +85,22 @@ def load_yolo(path: str):
 # Load models at startup
 @app.on_event("startup")    
 async def startup_event():
-    try: 
-        models["mobilenet"] = load_mobilenet_keras(MOBILENET_KERAS_PATH)
-    except Exception as e:  
-        logger.error(f"Error loading MobileNet model: {e}") 
-        models["mobilenet"] = None  
-    try:
-        models["yolo"] = load_yolo(YOLO_CHECKPOINT_PATH)
-    except Exception as e:
-        logger.error(f"Error loading YOLO model: {e}")
-        models["yolo"] = None   
+    logger.info("Server starting up... loading models")
+    models["mobilenet"] = load_mobilenet(MOBILENET_CHECKPOINT_PATH)
+    models["yolo"] = load_yolo(YOLO_CHECKPOINT_PATH)
+    logger.info("All models loaded successfully")
 
-# Image preprocessing
+
+# Image preprocessing for MobileNet (PyTorch)
 IMG_SIZE = 224
-def preprocess_for_keras(image: Image.Image):
-    img = image.resize((IMG_SIZE, IMG_SIZE))
-    img_array = np.array(img).astype('float32')
-    img_array = tf.keras.applications.mobilenet_v3.preprocess_input(img_array)
-    return np.expand_dims(img_array, axis=0)
-
+preprocess = transforms.Compose([
+    transforms.Resize((IMG_SIZE, IMG_SIZE)),
+    transforms.ToTensor(),
+    transforms.Normalize(
+        mean=[0.485, 0.456, 0.406],
+        std=[0.229, 0.224, 0.225],
+    ),
+])
 # -------------------------
 # Prediction Logic
 # -------------------------
@@ -115,6 +112,10 @@ class PredictionResponse(BaseModel):
     feedback: List[str]
     model_used: str 
 
+
+# -------------------------
+# Helper: process + predict
+# -------------------------
 def run_prediction(image: Image.Image):
     image_rgb = image.convert("RGB")
     final_label, final_rule = CLASS_TO_RULE[0]
@@ -124,7 +125,7 @@ def run_prediction(image: Image.Image):
     # MobileNet
     mb_model = models["mobilenet"]
     if mb_model:
-        img_batch = preprocess_for_keras(image_rgb)
+        img_batch = preprocess(image_rgb)
         preds = mb_model.predict(img_batch, verbose=0)
         class_id = int(np.argmax(preds[0]))
         confidence = float(preds[0][class_id])
@@ -175,22 +176,23 @@ def run_prediction(image: Image.Image):
 # -------------------------
 @app.get("/")
 async def root():
+    """Health check endpoint"""
     return {
         "status": "ok" if models["mobilenet"] is not None else "degraded",
         "message": "IBCS Compliance API is running",
         "model_loaded": models["mobilenet"] is not None,
         "device": str(DEVICE),
-        "num_classes": len(CLASS_TO_RULE) if models["mobilenet"] is not None else 0,
-        "port": os.environ.get("PORT", "Not set")
+        "num_classes": len(CLASS_TO_RULE) if models["mobilenet"] is not None else 0
     }
+
 
 @app.get("/health")
 async def health():
+    """Detailed health check"""
     return {
         "status": "healthy" if models["mobilenet"] is not None else "unhealthy",
         "model_loaded": models["mobilenet"] is not None,
         "device": str(DEVICE),
-        "checkpoint_exists": os.path.exists("./Checkpoints/mobilenet_rules.pth")
     }
 
 @app.post("/api/predict", response_model=PredictionResponse)
@@ -210,4 +212,4 @@ async def predict(file: UploadFile = File(...)):
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port, log_level="info")
+    uvicorn.run("main:app", host="0.0.0.0", port=port)
